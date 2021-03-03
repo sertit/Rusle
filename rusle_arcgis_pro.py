@@ -195,7 +195,7 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
         str: Cropped DEM path
     """
     if aoi_path:
-        #LOGGER.info("Crop Raster to the AOI extent")
+        # LOGGER.info("Crop Raster to the AOI extent")
         with rasterio.open(raster_path) as raster_dst:
             aoi = gpd.read_file(aoi_path)
             if aoi.crs != raster_dst.crs:
@@ -207,7 +207,8 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
                              "width": cropped_raster_arr.shape[2],
                              "transform": cropped_raster_tr})
 
-            cropped_raster_path = os.path.join(tmp_dir, os.path.basename(os.path.splitext(raster_path)[0])+'_cropped.tif')
+            cropped_raster_path = os.path.join(tmp_dir,
+                                               os.path.basename(os.path.splitext(raster_path)[0]) + '_cropped.tif')
             with rasterio.open(cropped_raster_path, "w", **out_meta) as dest:
                 dest.write(cropped_raster_arr)
 
@@ -216,7 +217,15 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
         return raster_path
 
 
-def produce_fcover(red_band, nir_band, aoi_path: str, tmp_dir : str):
+def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution : float):
+
+    # Read and resample red
+    with rasterio.open(red_path) as red_dst:
+        red_band, _ = raster_utils.read(red_dst, output_resolution, Resampling.bilinear)
+
+    # Read and resample nir
+    with rasterio.open(nir_path) as nir_dst:
+        nir_band, meta= raster_utils.read(nir_dst, output_resolution, Resampling.bilinear)
 
     # Process ndvi
     ndvi = norm_diff(nir_band, red_band)
@@ -236,7 +245,7 @@ def produce_fcover(red_band, nir_band, aoi_path: str, tmp_dir : str):
 
     # Open cropped_ndvi_path
     with rasterio.open(ndvi_crop_path) as ndvi_crop_dst:
-        ndvi_crop_band, _= raster_utils.read(ndvi_crop_dst)
+        ndvi_crop_band, meta_crop = raster_utils.read(ndvi_crop_dst)
 
     # Extract NDVI min and max inside the AOI
     ndvi_stat = zonal_stats(aoi_path, ndvi_crop_path, stats="min max")
@@ -246,7 +255,7 @@ def produce_fcover(red_band, nir_band, aoi_path: str, tmp_dir : str):
     # Fcover calculation
     fcover_array = no_data_divide(ndvi_crop_band.astype(np.float32) - ndvi_min, ndvi_max - ndvi_min)
 
-    return fcover_array, meta
+    return fcover_array, meta_crop
 
 
 def update_raster(raster_path: str, shp_path: str, output_raster_path: str, value: int) -> (np.ndarray, dict):
@@ -323,16 +332,17 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray) -> np.ndarray:
     # C calculation 
 
     c_arr = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
-                1 - fcover_arr.astype(np.float32))
+            1 - fcover_arr.astype(np.float32))
 
     return c_arr
 
-def spatial_resolution(raster_path : str):
+
+def spatial_resolution(raster_path: str):
     """extracts the XY Pixel Size"""
     raster = rasterio.open(raster_path)
     t = raster.transform
     x = t[0]
-    y =-t[4]
+    y = -t[4]
     return x, y
 
 
@@ -343,10 +353,10 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
 
     # Make slope degree commande
     cmd_slope_d = ["gdaldem",
-                 "slope",
-                 "-compute_edges",
-                 type_utils.to_cmd_string(dem_path),
-                 type_utils.to_cmd_string(slope_dem_d)]
+                   "slope",
+                   "-compute_edges",
+                   type_utils.to_cmd_string(dem_path),
+                   type_utils.to_cmd_string(slope_dem_d)]
 
     # Run command
     sys_utils.run_command(cmd_slope_d)
@@ -366,7 +376,7 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     dir_path = os.path.join(tmp_dir, 'dir.tif')
     grid.to_raster('dir', dir_path)
 
-    ##Compute accumulation
+    # Compute accumulation
     grid.accumulation(data='dir', out_name='acc')
 
     # Export  accumulation
@@ -380,26 +390,32 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     with rasterio.open(acc_path) as acc_dst:
         acc_band, meta = raster_utils.read(acc_dst)
 
-    # Open slope
+    # Open slope d
     with rasterio.open(slope_dem_d) as slope_dst:
-        slope_band, _ = raster_utils.read(slope_dst)
+        slope_d, _ = raster_utils.read(slope_dst)
 
-    # Make slope percentage commande
+    # Make slope percentage command
     cmd_slope_p = ["gdaldem",
-                 "slope",
-                 "-compute_edges",
-                 type_utils.to_cmd_string(dem_path),
-                 type_utils.to_cmd_string(slope_dem_d), "-p"]
+                   "slope",
+                   "-compute_edges",
+                   type_utils.to_cmd_string(dem_path),
+                   type_utils.to_cmd_string(slope_dem_d), "-p"]
 
     # Run command
     sys_utils.run_command(cmd_slope_p)
 
+    # Open slope p
+    with rasterio.open(slope_dem_d) as slope_dst:
+        slope_p, _ = raster_utils.read(slope_dst)
 
-
+    # m processing
+    #conditions = [slope_p < 1, slope_p >= 1 & slope_p > 3, slope_p >= 3 & slope_p > 5, slope_p >= 5]
+    #choices = [0.2, 0.3, 0.4, 0.5]
+    #m = np.select(conditions, choices, default=np.nan)
 
     # Produce ls
-    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, 0.4) * np.power(
-        np.sin(slope_band.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 0.4 fixed ?
+    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, 0.4 ) * np.power(
+        np.sin(slope_d.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 1.3 fixed ?
 
     # Write ls
     raster_utils.write(ls_arr, ls_path, meta, nodata=0)
@@ -424,23 +440,16 @@ if __name__ == '__main__':
 
     ref_crs = get_crs(red_path)
 
-    ##### Process Fcover
-    # Read and resample red
-    with rasterio.open(red_path) as red_dst:
-        red_band, meta = raster_utils.read(red_dst, output_resolution, Resampling.bilinear)
-
-    # Read and resample nir
-    with rasterio.open(nir_path) as nir_dst:
-        nir_band, _ = raster_utils.read(nir_dst, output_resolution, Resampling.bilinear)
+    #----- Process Fcover
 
     # Process fcover
-    fcover_arr, meta_fcover = produce_fcover(red_band, nir_band, aoi_path, tmp_dir)
+    fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir, output_resolution)
 
     # Write fcover
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
     raster_utils.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
-    ##### Process Cfactor
+    #----- Process Cfactor
     # Je n'arrive pas à reprojeter l'AOI en 3035 ETRS89 ...
 
     # Reproject LULC 
@@ -458,14 +467,14 @@ if __name__ == '__main__':
     raster_utils.write(lulc_band, cropped_lulc_resampled, meta_lulc, nodata=0)
 
     # Mask lulc with del 
-    if dem_path :
+    if dem_path:
         # Reproject del
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
         cropped_lulc_masked = os.path.join(tmp_dir, "lulc_masked.tif")
         lulc_band, meta_lulc = update_raster(cropped_lulc_resampled, reproj_del, cropped_lulc_masked,
-                                                                334)
+                                             334)
 
     # Collocate both raster
     collocated_lulc_arr, meta_lulc_collocated = raster_utils.collocate(meta_fcover, lulc_band,
@@ -475,15 +484,14 @@ if __name__ == '__main__':
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
     raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
 
-    #### Process C
+    #----- Process C
     c_arr = produce_c(collocated_lulc_arr, fcover_arr)
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     raster_utils.write(c_arr, c_out, meta_lulc, nodata=0)
 
-
-    #### Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
+    #----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
 
     # Extract crs of the dem
     with rasterio.open(dem_path, "r") as dem_dst:
@@ -500,4 +508,4 @@ if __name__ == '__main__':
 
     # Produce ls factor
     ls_path = os.path.join(tmp_dir, "ls.tif")
-    ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir )
+    ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
