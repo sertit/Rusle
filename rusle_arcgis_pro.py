@@ -1,5 +1,5 @@
 """
-Add description 
+Add description
 
 """
 
@@ -14,6 +14,7 @@ import os
 from typing import Union
 import numpy as np
 import rasterio
+from rasterio import MemoryFile
 from rasterio.crs import CRS
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject
@@ -290,7 +291,7 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
 # Ajouter les types correpondants (array ...)
 def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
     # Identify Cfactor
-    # Cfactor dict
+    # Cfactor dict and c_arr_arable
     if lulc_type == 'clc':
         cfactor_dict = {
             221: [0.15, 0.45],
@@ -314,7 +315,7 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
             335: [0, 0]
         }
 
-        c_arr_arrable = np.where(lulc_arr == 211, -1, 100)
+        #c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
 
     elif lulc_type == 'glc':
         cfactor_dict = {
@@ -366,13 +367,11 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
         }
 
         c_arr_arable = np.where(lulc_arr == 40, 0.27, np.nan)
-    elif lulc_type == 'gl' :
+
+    elif lulc_type == 'gl':
         cfactor_dict = {
 
-
         }
-
-
 
     # List init
     conditions = []
@@ -391,12 +390,15 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
     # Cfactor range processing
     cfactor_arr_range = np.select(conditions, choices_range, default=np.nan)
 
-    # C calculation
+    # C non arable calculation
 
     c_arr_non_arable = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
             1 - fcover_arr.astype(np.float32))
 
-    return c_arr, cfactor_dict
+    # Merge arable and non arable c values
+    # c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
+
+    return c_arr_non_arable, cfactor_dict
 
 
 def spatial_resolution(raster_path: str):
@@ -470,13 +472,13 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     with rasterio.open(slope_dem_d) as slope_dst:
         slope_p, _ = raster_utils.read(slope_dst)
 
-    # m processing
-    # conditions = [slope_p < 1, slope_p >= 1 & slope_p > 3, slope_p >= 3 & slope_p > 5, slope_p >= 5]
-    # choices = [0.2, 0.3, 0.4, 0.5]
-    # m = np.select(conditions, choices, default=np.nan)
+    # m calculation
+    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5), slope_p >= 5]
+    choices = [0.2, 0.3, 0.4, 0.5]
+    m = np.select(conditions, choices, default=np.nan)
 
     # Produce ls
-    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, 0.4) * np.power(
+    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, m) * np.power(
         np.sin(slope_d.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 1.3 fixed ?
 
     # Write ls
@@ -501,6 +503,8 @@ if __name__ == '__main__':
     output_resolution = 5
 
     ref_crs = get_crs(red_path)
+
+    world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"
 
     # ----- Process Fcover
 
@@ -550,6 +554,66 @@ if __name__ == '__main__':
     # Write collocated lulc raster
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
     raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
+
+    #------ Faire une fonction-- Produce europe countries array C-factor for Arable land
+    arable_c_dict = {
+        "Finland": 0.231,
+        'France': 0.20200000000,
+        'Germany': 0.20000000000,
+        'Greece': 0.28000000000,
+        'Hungary': 0.27500000000,
+        'Ireland': 0.20200000000,
+        'Italy': 0.21100000000,
+        'Latvia': 0.23700000000,
+        'Luxembourg': 0.21500000000,
+        'Malta': 0.43400000000,
+        'Netherlands': 0.26000000000,
+        'Poland': 0.24700000000,
+        'Portugal': 0.35200000000,
+        'Romania': 0.29600000000,
+        'Slovakia': 0.23500000000,
+        'Slovenia': 0.24800000000,
+        'Spain': 0.28900000000,
+        'Sweden': 0.23700000000,
+        'the former Yugoslav Republic of Macedonia': 0.25500000000,
+        'United Kingdom': 0.17700000000,
+        'Croatia': 0.25500000000
+    }
+
+    # Reproject aoi to wgs84
+    aoi = gpd.read_file(aoi_path)
+    crs_4326 = CRS.from_epsg(4326)
+    if aoi.crs != crs_4326:
+        aoi = aoi.to_crs(crs_4326)
+
+    # Extract europe countries
+    world_countries = gpd.read_file(world_countries_path, bbox=aoi.envelope)
+    europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
+
+    # Initialize arable arr
+    arable_c_arr = np.full_like(collocated_lulc_arr, fill_value=0.27)
+    arable_c_meta = meta_lulc_collocated.copy()
+    arable_c_meta["dtype"] = arable_c_arr.dtype
+
+
+    # Reproject europe_countries
+    crs_arable = arable_c_meta["crs"]
+    if europe_countries.crs != crs_arable:
+        europe_countries = europe_countries.to_crs(crs_arable)
+
+    # Update arable_arr with arable_dict
+    with MemoryFile() as memfile:
+        with memfile.open(**arable_c_meta) as dst:
+            dst.write(arable_c_arr)
+            for key in list(europe_countries['COUNTRY']):
+                geoms = [feature for feature in europe_countries[europe_countries['COUNTRY'] == key]['geometry']]
+                arable_c_arr, _ = mask(dst, geoms, invert=True, nodata=arable_c_dict[key])
+                dst.write(arable_c_arr)
+
+    c_arable_out = os.path.join(tmp_dir, "c_arable.tif")
+    raster_utils.write(arable_c_arr, c_arable_out, arable_c_meta, nodata=0)
+
+    #------ Fin fonction à faire
 
     # ----- Process C
     c_arr, cfactor = produce_c(collocated_lulc_arr, fcover_arr, 'clc')
