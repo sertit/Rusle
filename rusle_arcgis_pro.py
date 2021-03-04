@@ -26,6 +26,8 @@ from sertit_utils.eo import raster_utils
 
 from pysheds.grid import Grid
 
+np.seterr(divide='ignore', invalid='ignore')
+
 
 def set_no_data(idx: np.ma.masked_array) -> np.ma.masked_array:
     """
@@ -217,15 +219,14 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
         return raster_path
 
 
-def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution : float):
-
+def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution: float):
     # Read and resample red
     with rasterio.open(red_path) as red_dst:
         red_band, _ = raster_utils.read(red_dst, output_resolution, Resampling.bilinear)
 
     # Read and resample nir
     with rasterio.open(nir_path) as nir_dst:
-        nir_band, meta= raster_utils.read(nir_dst, output_resolution, Resampling.bilinear)
+        nir_band, meta = raster_utils.read(nir_dst, output_resolution, Resampling.bilinear)
 
     # Process ndvi
     ndvi = norm_diff(nir_band, red_band)
@@ -287,30 +288,91 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
 
 
 # Ajouter les types correpondants (array ...)
-def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray) -> np.ndarray:
+def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
     # Identify Cfactor
-    # Cfactor dict 
-    cfactor_dict = {
-        221: [0.15, 0.45],
-        222: [0.1, 0.3],
-        223: [0.1, 0.3],
-        231: [0.05, 0.15],
-        241: [0.07, 0.35],
-        242: [0.07, 0.2],
-        243: [0.05, 0.2],
-        244: [0.03, 0.13],
-        311: [0.0001, 0.003],
-        312: [0.0001, 0.003],
-        313: [0.0001, 0.003],
-        321: [0.01, 0.08],
-        322: [0.01, 0.1],
-        324: [0.003, 0.05],
-        331: [0, 0],
-        332: [0, 0],
-        333: [0.1, 0.45],
-        334: [0.1, 0.55],
-        335: [0, 0]
-    }
+    # Cfactor dict
+    if lulc_type == 'clc':
+        cfactor_dict = {
+            221: [0.15, 0.45],
+            222: [0.1, 0.3],
+            223: [0.1, 0.3],
+            231: [0.05, 0.15],
+            241: [0.07, 0.35],
+            242: [0.07, 0.2],
+            243: [0.05, 0.2],
+            244: [0.03, 0.13],
+            311: [0.0001, 0.003],
+            312: [0.0001, 0.003],
+            313: [0.0001, 0.003],
+            321: [0.01, 0.08],
+            322: [0.01, 0.1],
+            324: [0.003, 0.05],
+            331: [0, 0],
+            332: [0, 0],
+            333: [0.1, 0.45],
+            334: [0.1, 0.55],
+            335: [0, 0]
+        }
+
+        c_arr_arrable = np.where(lulc_arr == 211, -1, 100)
+
+    elif lulc_type == 'glc':
+        cfactor_dict = {
+            111: [0.0001, 0.003],
+            113: [0.0001, 0.003],
+            112: [0.0001, 0.003],
+            114: [0.0001, 0.003],
+            115: [0.0001, 0.003],
+            116: [0.0001, 0.003],
+            121: [0.0001, 0.003],
+            123: [0.0001, 0.003],
+            122: [0.0001, 0.003],
+            124: [0.0001, 0.003],
+            125: [0.0001, 0.003],
+            126: [0.0001, 0.003],
+            20: [0.003, 0.05],
+            30: [0.01, 0.08],
+            90: [0.01, 0.08],
+            100: [0.01, 0.1],
+            60: [0.1, 0.45],
+            40: [0.07, 0.2],
+            70: [0, 0]
+        }
+
+        c_arr_arable = np.where(np.isin(lulc_arr, [11, 14, 20]), 0.27, np.nan)
+
+    elif lulc_type == 'gc':
+        cfactor_dict = {
+            11: [0.07, 0.2],
+            14: [0.07, 0.2],
+            20: [0.07, 0.2],
+            30: [0.07, 0.2],
+            40: [0.0001, 0.003],
+            50: [0.0001, 0.003],
+            60: [0.0001, 0.003],
+            70: [0.0001, 0.003],
+            90: [0.0001, 0.003],
+            100: [0.0001, 0.003],
+            110: [0.003, 0.05],
+            120: [0.003, 0.05],
+            130: [0.003, 0.05],
+            140: [0.01, 0.08],
+            150: [0.1, 0.45],
+            160: [0.01, 0.1],
+            170: [0.01, 0.1],
+            180: [0.01, 0.1],
+            200: [0, 0],
+            220: [0, 0]
+        }
+
+        c_arr_arable = np.where(lulc_arr == 40, 0.27, np.nan)
+    elif lulc_type == 'gl' :
+        cfactor_dict = {
+
+
+        }
+
+
 
     # List init
     conditions = []
@@ -329,12 +391,12 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray) -> np.ndarray:
     # Cfactor range processing
     cfactor_arr_range = np.select(conditions, choices_range, default=np.nan)
 
-    # C calculation 
+    # C calculation
 
-    c_arr = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
+    c_arr_non_arable = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
             1 - fcover_arr.astype(np.float32))
 
-    return c_arr
+    return c_arr, cfactor_dict
 
 
 def spatial_resolution(raster_path: str):
@@ -409,12 +471,12 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
         slope_p, _ = raster_utils.read(slope_dst)
 
     # m processing
-    #conditions = [slope_p < 1, slope_p >= 1 & slope_p > 3, slope_p >= 3 & slope_p > 5, slope_p >= 5]
-    #choices = [0.2, 0.3, 0.4, 0.5]
-    #m = np.select(conditions, choices, default=np.nan)
+    # conditions = [slope_p < 1, slope_p >= 1 & slope_p > 3, slope_p >= 3 & slope_p > 5, slope_p >= 5]
+    # choices = [0.2, 0.3, 0.4, 0.5]
+    # m = np.select(conditions, choices, default=np.nan)
 
     # Produce ls
-    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, 0.4 ) * np.power(
+    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, 0.4) * np.power(
         np.sin(slope_d.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 1.3 fixed ?
 
     # Write ls
@@ -440,7 +502,7 @@ if __name__ == '__main__':
 
     ref_crs = get_crs(red_path)
 
-    #----- Process Fcover
+    # ----- Process Fcover
 
     # Process fcover
     fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir, output_resolution)
@@ -449,31 +511,36 @@ if __name__ == '__main__':
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
     raster_utils.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
-    #----- Process Cfactor
-    # Je n'arrive pas à reprojeter l'AOI en 3035 ETRS89 ...
+    # ----- Process Cfactor
+    # Extract crs of the lulc
+    with rasterio.open(lulc_path, "r") as lulc_dst:
+        lulc_crs = lulc_dst.crs
 
-    # Reproject LULC 
-    lulc_reprojected = reproject_raster(lulc_path, ref_crs)
+    # Reproject the shp
+    aoi_path_reproj_l = reproj_shp(aoi_path, lulc_crs)
 
     # Crop the lulc with reprojected AOI
-    cropped_lulc_path = crop_raster(aoi_path, lulc_reprojected, tmp_dir)
+    cropped_lulc_path = crop_raster(aoi_path_reproj_l, lulc_path, tmp_dir)
+
+    # Reproject LULC
+    lulc_reprojected = reproject_raster(cropped_lulc_path, ref_crs)
 
     # Resample cropped lulc
-    with rasterio.open(cropped_lulc_path) as lulc_dst:
+    with rasterio.open(lulc_reprojected) as lulc_dst:
         lulc_band, meta_lulc = raster_utils.read(lulc_dst, output_resolution, Resampling.nearest)
 
     # Write resample lulc raster
-    cropped_lulc_resampled = os.path.join(tmp_dir, "lulc_resampled.tif")
-    raster_utils.write(lulc_band, cropped_lulc_resampled, meta_lulc, nodata=0)
+    lulc_resampled = os.path.join(tmp_dir, "lulc_resampled.tif")
+    raster_utils.write(lulc_band, lulc_resampled, meta_lulc, nodata=0)
 
-    # Mask lulc with del 
+    # Mask lulc with del
     if dem_path:
         # Reproject del
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
         cropped_lulc_masked = os.path.join(tmp_dir, "lulc_masked.tif")
-        lulc_band, meta_lulc = update_raster(cropped_lulc_resampled, reproj_del, cropped_lulc_masked,
+        lulc_band, meta_lulc = update_raster(lulc_resampled, reproj_del, cropped_lulc_masked,
                                              334)
 
     # Collocate both raster
@@ -484,14 +551,14 @@ if __name__ == '__main__':
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
     raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
 
-    #----- Process C
-    c_arr = produce_c(collocated_lulc_arr, fcover_arr)
+    # ----- Process C
+    c_arr, cfactor = produce_c(collocated_lulc_arr, fcover_arr, 'clc')
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     raster_utils.write(c_arr, c_out, meta_lulc, nodata=0)
 
-    #----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
+    # ----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
 
     # Extract crs of the dem
     with rasterio.open(dem_path, "r") as dem_dst:
