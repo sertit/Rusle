@@ -455,7 +455,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi
     # Merge arable and non arable c values
     c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
 
-    return c_arr_non_arable, cfactor_dict
+    return c_arr, cfactor_dict
 
 
 def spatial_resolution(raster_path: str):
