@@ -287,9 +287,65 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
 
     return out_image, out_meta
 
+def produce_c_arable(aoi_path : str, raster_arr :np.ndarray, meta_raster : dir, world_countries_path : str  ):
+
+    arable_c_dict = {
+        "Finland": 0.231,
+        'France': 0.20200000000,
+        'Germany': 0.20000000000,
+        'Greece': 0.28000000000,
+        'Hungary': 0.27500000000,
+        'Ireland': 0.20200000000,
+        'Italy': 0.21100000000,
+        'Latvia': 0.23700000000,
+        'Luxembourg': 0.21500000000,
+        'Malta': 0.43400000000,
+        'Netherlands': 0.26000000000,
+        'Poland': 0.24700000000,
+        'Portugal': 0.35200000000,
+        'Romania': 0.29600000000,
+        'Slovakia': 0.23500000000,
+        'Slovenia': 0.24800000000,
+        'Spain': 0.28900000000,
+        'Sweden': 0.23700000000,
+        'the former Yugoslav Republic of Macedonia': 0.25500000000,
+        'United Kingdom': 0.17700000000,
+        'Croatia': 0.25500000000
+    }
+
+    # Reproject aoi to wgs84
+    aoi = gpd.read_file(aoi_path)
+    crs_4326 = CRS.from_epsg(4326)
+    if aoi.crs != crs_4326:
+        aoi = aoi.to_crs(crs_4326)
+
+    # Extract europe countries
+    world_countries = gpd.read_file(world_countries_path, bbox=aoi.envelope)
+    europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
+
+    # Initialize arable arr
+    arable_c_arr = np.full_like(raster_arr, fill_value=0.27)
+    arable_c_meta = meta_raster.copy()
+    arable_c_meta["dtype"] = arable_c_arr.dtype
+
+    # Reproject europe_countries
+    crs_arable = arable_c_meta["crs"]
+    if europe_countries.crs != crs_arable:
+        europe_countries = europe_countries.to_crs(crs_arable)
+
+    # Update arable_arr with arable_dict
+    with MemoryFile() as memfile:
+        with memfile.open(**arable_c_meta) as dst:
+            dst.write(arable_c_arr)
+            for key in list(europe_countries['COUNTRY']):
+                geoms = [feature for feature in europe_countries[europe_countries['COUNTRY'] == key]['geometry']]
+                arable_c_arr, meta_arable_c = mask(dst, geoms, invert=True, nodata=arable_c_dict[key])
+                dst.write(arable_c_arr)
+
+    return arable_c_arr, meta_arable_c
 
 # Ajouter les types correpondants (array ...)
-def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
+def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi_path : str, lulc_type: str):
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
     if lulc_type == 'clc':
@@ -314,8 +370,9 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
             334: [0.1, 0.55],
             335: [0, 0]
         }
-
-        #c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
+        world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp" # A mettre en variable globale
+        arable_c_arr, _ = produce_c_arable(aoi_path , lulc_arr , meta_lulc, world_countries_path )
+        c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
 
     elif lulc_type == 'glc':
         cfactor_dict = {
@@ -396,7 +453,7 @@ def produce_c(lulc_arr: np.ndarray, fcover_arr: np.ndarray, lulc_type: str):
             1 - fcover_arr.astype(np.float32))
 
     # Merge arable and non arable c values
-    # c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
+    c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
 
     return c_arr_non_arable, cfactor_dict
 
@@ -487,6 +544,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     return ls_arr, meta
 
 
+
+    # ------ Fin fonction à faire
 if __name__ == '__main__':
 
     ##### Load inputs (Only over europe yet)
@@ -503,8 +562,6 @@ if __name__ == '__main__':
     output_resolution = 5
 
     ref_crs = get_crs(red_path)
-
-    world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"
 
     # ----- Process Fcover
 
@@ -555,68 +612,8 @@ if __name__ == '__main__':
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
     raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
 
-    #------ Faire une fonction-- Produce europe countries array C-factor for Arable land
-    arable_c_dict = {
-        "Finland": 0.231,
-        'France': 0.20200000000,
-        'Germany': 0.20000000000,
-        'Greece': 0.28000000000,
-        'Hungary': 0.27500000000,
-        'Ireland': 0.20200000000,
-        'Italy': 0.21100000000,
-        'Latvia': 0.23700000000,
-        'Luxembourg': 0.21500000000,
-        'Malta': 0.43400000000,
-        'Netherlands': 0.26000000000,
-        'Poland': 0.24700000000,
-        'Portugal': 0.35200000000,
-        'Romania': 0.29600000000,
-        'Slovakia': 0.23500000000,
-        'Slovenia': 0.24800000000,
-        'Spain': 0.28900000000,
-        'Sweden': 0.23700000000,
-        'the former Yugoslav Republic of Macedonia': 0.25500000000,
-        'United Kingdom': 0.17700000000,
-        'Croatia': 0.25500000000
-    }
-
-    # Reproject aoi to wgs84
-    aoi = gpd.read_file(aoi_path)
-    crs_4326 = CRS.from_epsg(4326)
-    if aoi.crs != crs_4326:
-        aoi = aoi.to_crs(crs_4326)
-
-    # Extract europe countries
-    world_countries = gpd.read_file(world_countries_path, bbox=aoi.envelope)
-    europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
-
-    # Initialize arable arr
-    arable_c_arr = np.full_like(collocated_lulc_arr, fill_value=0.27)
-    arable_c_meta = meta_lulc_collocated.copy()
-    arable_c_meta["dtype"] = arable_c_arr.dtype
-
-
-    # Reproject europe_countries
-    crs_arable = arable_c_meta["crs"]
-    if europe_countries.crs != crs_arable:
-        europe_countries = europe_countries.to_crs(crs_arable)
-
-    # Update arable_arr with arable_dict
-    with MemoryFile() as memfile:
-        with memfile.open(**arable_c_meta) as dst:
-            dst.write(arable_c_arr)
-            for key in list(europe_countries['COUNTRY']):
-                geoms = [feature for feature in europe_countries[europe_countries['COUNTRY'] == key]['geometry']]
-                arable_c_arr, _ = mask(dst, geoms, invert=True, nodata=arable_c_dict[key])
-                dst.write(arable_c_arr)
-
-    c_arable_out = os.path.join(tmp_dir, "c_arable.tif")
-    raster_utils.write(arable_c_arr, c_arable_out, arable_c_meta, nodata=0)
-
-    #------ Fin fonction à faire
-
     # ----- Process C
-    c_arr, cfactor = produce_c(collocated_lulc_arr, fcover_arr, 'clc')
+    c_arr, cfactor = produce_c(collocated_lulc_arr,meta_lulc_collocated, fcover_arr, aoi_path, 'clc')
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
