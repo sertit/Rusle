@@ -135,7 +135,7 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
     vec = gpd.read_file(shp_path)
     if vec.crs != raster_crs:
         # LOGGER.info("Reproject shp vector to CRS %s", raster_crs)
-        reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj")
+        reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj_{}".format(str(raster_crs)[5:]))
 
         # Delete reprojected vector if existing
         if os.path.isfile(reproj_vec):
@@ -187,7 +187,7 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
         return src_file
 
 
-def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
+def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str):
     """
     Crop Raster to the AOI extent
     Args:
@@ -197,27 +197,25 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> str:
     Returns:
         str: Cropped DEM path
     """
-    if aoi_path:
-        # LOGGER.info("Crop Raster to the AOI extent")
-        with rasterio.open(raster_path) as raster_dst:
-            aoi = gpd.read_file(aoi_path)
-            if aoi.crs != raster_dst.crs:
-                aoi = aoi.to_crs(raster_dst.crs)
 
-            cropped_raster_arr, cropped_raster_tr = mask(raster_dst, aoi.envelope, crop=True)
-            out_meta = raster_dst.meta
-            out_meta.update({"height": cropped_raster_arr.shape[1],
-                             "width": cropped_raster_arr.shape[2],
-                             "transform": cropped_raster_tr})
+    # LOGGER.info("Crop Raster to the AOI extent")
+    with rasterio.open(raster_path) as raster_dst:
+        aoi = gpd.read_file(aoi_path)
+        if aoi.crs != raster_dst.crs:
+            aoi = aoi.to_crs(raster_dst.crs)
 
-            cropped_raster_path = os.path.join(tmp_dir,
-                                               os.path.basename(os.path.splitext(raster_path)[0]) + '_cropped.tif')
-            with rasterio.open(cropped_raster_path, "w", **out_meta) as dest:
-                dest.write(cropped_raster_arr)
+        cropped_raster_arr, cropped_raster_tr = mask(raster_dst, aoi.envelope, crop=True)
+        out_meta = raster_dst.meta
+        out_meta.update({"height": cropped_raster_arr.shape[1],
+                         "width": cropped_raster_arr.shape[2],
+                         "transform": cropped_raster_tr})
 
-            return cropped_raster_path
-    else:
-        return raster_path
+        cropped_raster_path = os.path.join(tmp_dir,
+                                           os.path.basename(os.path.splitext(raster_path)[0]) + '_cropped.tif')
+        with rasterio.open(cropped_raster_path, "w", **out_meta) as dest:
+            dest.write(cropped_raster_arr)
+
+        return cropped_raster_path, cropped_raster_arr, out_meta
 
 
 def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution: float):
@@ -243,7 +241,7 @@ def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resol
     aoi_path = reproj_shp(aoi_path, ref_crs)
 
     # Crop the ndvi with reprojected AOI
-    ndvi_crop_path = crop_raster(aoi_path, ndvi_path, tmp_dir)
+    ndvi_crop_path, _, _ = crop_raster(aoi_path, ndvi_path, tmp_dir)
 
     # Open cropped_ndvi_path
     with rasterio.open(ndvi_crop_path) as ndvi_crop_dst:
@@ -287,8 +285,8 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
 
     return out_image, out_meta
 
-def produce_c_arable(aoi_path : str, raster_arr :np.ndarray, meta_raster : dir, world_countries_path : str  ):
 
+def produce_c_arable(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir, world_countries_path: str):
     arable_c_dict = {
         "Finland": 0.231,
         'France': 0.20200000000,
@@ -344,8 +342,9 @@ def produce_c_arable(aoi_path : str, raster_arr :np.ndarray, meta_raster : dir, 
 
     return arable_c_arr, meta_arable_c
 
+
 # Ajouter les types correpondants (array ...)
-def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi_path : str, lulc_type: str):
+def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_path: str, lulc_type: str):
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
     if lulc_type == 'clc':
@@ -370,8 +369,9 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi
             334: [0.1, 0.55],
             335: [0, 0]
         }
-        world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp" # A mettre en variable globale
-        arable_c_arr, _ = produce_c_arable(aoi_path , lulc_arr , meta_lulc, world_countries_path )
+        # Produce arable c
+        world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"  # A mettre en variable globale
+        arable_c_arr, _ = produce_c_arable(aoi_path, lulc_arr, meta_lulc, world_countries_path)
         c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
 
     elif lulc_type == 'glc':
@@ -396,7 +396,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi
             40: [0.07, 0.2],
             70: [0, 0]
         }
-
+        # Produce arable c
         c_arr_arable = np.where(np.isin(lulc_arr, [11, 14, 20]), 0.27, np.nan)
 
     elif lulc_type == 'gc':
@@ -422,20 +422,27 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi
             200: [0, 0],
             220: [0, 0]
         }
-
+        # Produce arable c
         c_arr_arable = np.where(lulc_arr == 40, 0.27, np.nan)
 
     elif lulc_type == 'gl':
         cfactor_dict = {
-
+            20: [0.00010000000, 0.00250000000],
+            30: [0.01000000000, 0.07000000000],
+            40: [0.01000000000, 0.08000000000],
+            90: [0.00000000000, 0.00000000000],
+            100: [0.00000000000, 0.00000000000],
+            110: [0.10000000000, 0.45000000000]
         }
+        # Produce arable c
+        c_arr_arable = np.where(lulc_arr == 10, 0.27, np.nan)
 
     # List init
     conditions = []
     choices_min = []
     choices_range = []
 
-    # Liste condition and choices
+    # Liste condition and choices for C non arable
     for key in cfactor_dict:
         conditions.append(lulc_arr == key)
         choices_min.append(cfactor_dict[key][0])
@@ -448,14 +455,13 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc : dir, fcover_arr: np.ndarray, aoi
     cfactor_arr_range = np.select(conditions, choices_range, default=np.nan)
 
     # C non arable calculation
-
     c_arr_non_arable = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
             1 - fcover_arr.astype(np.float32))
 
     # Merge arable and non arable c values
     c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
 
-    return c_arr, cfactor_dict
+    return c_arr, meta_lulc
 
 
 def spatial_resolution(raster_path: str):
@@ -516,17 +522,18 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
         slope_d, _ = raster_utils.read(slope_dst)
 
     # Make slope percentage command
+    slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
     cmd_slope_p = ["gdaldem",
                    "slope",
                    "-compute_edges",
                    type_utils.to_cmd_string(dem_path),
-                   type_utils.to_cmd_string(slope_dem_d), "-p"]
+                   type_utils.to_cmd_string(slope_dem_p), "-p"]
 
     # Run command
     sys_utils.run_command(cmd_slope_p)
 
     # Open slope p
-    with rasterio.open(slope_dem_d) as slope_dst:
+    with rasterio.open(slope_dem_p) as slope_dst:
         slope_p, _ = raster_utils.read(slope_dst)
 
     # m calculation
@@ -544,8 +551,6 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     return ls_arr, meta
 
 
-
-    # ------ Fin fonction à faire
 if __name__ == '__main__':
 
     ##### Load inputs (Only over europe yet)
@@ -578,10 +583,10 @@ if __name__ == '__main__':
         lulc_crs = lulc_dst.crs
 
     # Reproject the shp
-    aoi_path_reproj_l = reproj_shp(aoi_path, lulc_crs)
+    aoi_reproj_lulc_path = reproj_shp(aoi_path, lulc_crs)
 
     # Crop the lulc with reprojected AOI
-    cropped_lulc_path = crop_raster(aoi_path_reproj_l, lulc_path, tmp_dir)
+    cropped_lulc_path, _, _ = crop_raster(aoi_reproj_lulc_path, lulc_path, tmp_dir)
 
     # Reproject LULC
     lulc_reprojected = reproject_raster(cropped_lulc_path, ref_crs)
@@ -591,8 +596,8 @@ if __name__ == '__main__':
         lulc_band, meta_lulc = raster_utils.read(lulc_dst, output_resolution, Resampling.nearest)
 
     # Write resample lulc raster
-    lulc_resampled = os.path.join(tmp_dir, "lulc_resampled.tif")
-    raster_utils.write(lulc_band, lulc_resampled, meta_lulc, nodata=0)
+    lulc_update_path = os.path.join(tmp_dir, "lulc_resampled.tif")
+    raster_utils.write(lulc_band, lulc_update_path, meta_lulc, nodata=0)
 
     # Mask lulc with del
     if dem_path:
@@ -600,24 +605,30 @@ if __name__ == '__main__':
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
-        cropped_lulc_masked = os.path.join(tmp_dir, "lulc_masked.tif")
-        lulc_band, meta_lulc = update_raster(lulc_resampled, reproj_del, cropped_lulc_masked,
+        lulc_masked_path = os.path.join(tmp_dir, "lulc_masked.tif")
+        lulc_band, meta_lulc = update_raster(lulc_update_path, reproj_del, lulc_masked_path,
                                              334)
+        lulc_update_path = lulc_masked_path
+
+    # Reproject the shp
+    aoi_reproj_path = reproj_shp(aoi_path, ref_crs)
+    # Re Crop the lulc with AOI
+    recrop_lulc_path, recrop_lulc_arr, recrop_lulc_meta = crop_raster(aoi_reproj_path, lulc_update_path, tmp_dir)
 
     # Collocate both raster
-    collocated_lulc_arr, meta_lulc_collocated = raster_utils.collocate(meta_fcover, lulc_band,
-                                                                       meta_lulc, Resampling.nearest)
+    collocated_lulc_arr, meta_lulc_collocated = raster_utils.collocate(meta_fcover, recrop_lulc_arr,
+                                                                       recrop_lulc_meta, Resampling.nearest)
 
     # Write collocated lulc raster
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
     raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
 
     # ----- Process C
-    c_arr, cfactor = produce_c(collocated_lulc_arr,meta_lulc_collocated, fcover_arr, aoi_path, 'clc')
+    c_arr, c_meta = produce_c(collocated_lulc_arr, meta_lulc_collocated, fcover_arr, aoi_path, 'clc')
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
-    raster_utils.write(c_arr, c_out, meta_lulc, nodata=0)
+    raster_utils.write(c_arr, c_out, c_meta, nodata=0)
 
     # ----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
 
@@ -629,7 +640,7 @@ if __name__ == '__main__':
     aoi_path_reproj = reproj_shp(aoi_path, dem_crs)
 
     # Crop DEM
-    cropped_dem_path = crop_raster(aoi_path_reproj, dem_path, tmp_dir)
+    cropped_dem_path, _, _ = crop_raster(aoi_path_reproj, dem_path, tmp_dir)
 
     # Reproject dem
     dem_reprojected = reproject_raster(cropped_dem_path, ref_crs)
@@ -637,3 +648,5 @@ if __name__ == '__main__':
     # Produce ls factor
     ls_path = os.path.join(tmp_dir, "ls.tif")
     ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
+
+    # Process K 
