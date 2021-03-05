@@ -439,24 +439,16 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
 
     # List init
     conditions = []
-    choices_min = []
-    choices_range = []
+    choices = []
 
     # Liste condition and choices for C non arable
     for key in cfactor_dict:
         conditions.append(lulc_arr == key)
-        choices_min.append(cfactor_dict[key][0])
-        choices_range.append(cfactor_dict[key][1] - cfactor_dict[key][0])
-
-    # Cfactor min processing
-    cfactor_arr_min = np.select(conditions, choices_min, default=np.nan)
-
-    # Cfactor range processing
-    cfactor_arr_range = np.select(conditions, choices_range, default=np.nan)
+        choices.append(cfactor_dict[key][0] + (cfactor_dict[key][1] - cfactor_dict[key][0]) * (
+            1 - fcover_arr.astype(np.float32)))
 
     # C non arable calculation
-    c_arr_non_arable = cfactor_arr_min.astype(np.float32) + cfactor_arr_range.astype(np.float32) * (
-            1 - fcover_arr.astype(np.float32))
+    c_arr_non_arable = np.select(conditions, choices, default=np.nan)
 
     # Merge arable and non arable c values
     c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
@@ -649,4 +641,12 @@ if __name__ == '__main__':
     ls_path = os.path.join(tmp_dir, "ls.tif")
     ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
 
-    # Process K 
+    # Process K
+    def produce_k():
+        import pyodbc
+        dbfile = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"
+        conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + dbfile + ';')
+        cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND FROM HWSD_DATA')
+        hwsd_dict = {}
+        for row in cursor.fetchall():
+            hwsd_dict[row[0]] = [row[1], row[2], row[3]]
