@@ -27,6 +27,8 @@ from sertit_utils.eo import raster_utils
 
 from pysheds.grid import Grid
 
+import pyodbc
+
 np.seterr(divide='ignore', invalid='ignore')
 
 
@@ -343,7 +345,7 @@ def produce_c_arable(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir, wo
     return arable_c_arr, meta_arable_c
 
 
-# Ajouter les types correpondants (array ...)
+# Ajouter les types corepondants (array ...)
 def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_path: str, lulc_type: str):
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
@@ -445,7 +447,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
     for key in cfactor_dict:
         conditions.append(lulc_arr == key)
         choices.append(cfactor_dict[key][0] + (cfactor_dict[key][1] - cfactor_dict[key][0]) * (
-            1 - fcover_arr.astype(np.float32)))
+                1 - fcover_arr.astype(np.float32)))
 
     # C non arable calculation
     c_arr_non_arable = np.select(conditions, choices, default=np.nan)
@@ -541,6 +543,73 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     raster_utils.write(ls_arr, ls_path, meta, nodata=0)
 
     return ls_arr, meta
+    # Process K
+
+
+# A mettre à jour avec les bons paramètres
+def produce_k(aoi_path: str):
+    hwsd_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\hwsd.tif"  # A ajouter dans les variables globales
+    dbfile_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"  # A ajouter dans les variables globales
+
+    # Extract crs of the hwsd
+    with rasterio.open(hwsd_path, "r") as hwsd_dst:
+        hwsd_crs = hwsd_dst.crs
+
+    # Reproject the shp
+    aoi_reproj_path = reproj_shp(aoi_path, hwsd_crs)
+
+    # Crop hwsd
+    crop_hwsd_path, crop_hwsd_arr, crop_hwsd_meta = crop_raster(aoi_reproj_path, hwsd_path, tmp_dir)
+
+    # Extract soil information from ce access DB
+    conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + dbfile_path + ';')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE FROM HWSD_DATA')
+
+    # K calculation for each type of values
+    k_dict = {}
+    for row in cursor.fetchall():
+        if None in [row[1], row[2], row[3], row[4], row[5]]:
+            k = np.nan
+        else:
+            # Silt (%) –silt fraction content (0.002 –0.05 mm)
+            s_silt = row[1]
+            # Clay (%) –clay fraction content (<0.002 mm)
+            s_clay = row[2]
+            # Sand (%) –sand fraction content (0.05 –2mm)
+            s_sand = row[3]
+            # Organic matter (%)
+            a = row[4]
+            # Soil structure code used in soil classification
+            b = row[5]
+            # Profile permeability class
+            c = 1
+
+            # VFS (%) –very fine sand fraction content (0.05 –0.1 mm)
+            vfs = (0.74 - (0.62 * s_sand / 100)) * s_sand
+
+            # Textural factor
+            m = (s_silt + vfs) * (100 - s_clay)
+
+            # K (Soil erodibility factor)
+            k = ((2.1 * (m ** 1.14) * (10 ** -4) * (12 - a)) + (3.25 * (b - 2)) + (2.5 * (c - 3))) / 100
+
+        # Add value in the dictionary
+        k_dict[row[0]] = k
+
+    conditions = []
+    choices = []
+
+    # List conditions and choices for C non arable
+    for key in k_dict:
+        conditions.append(crop_hwsd_arr == key)
+        choices.append(k_dict[key])
+
+    # Update arr with k values
+    k_arr = np.select(conditions, choices, default=np.nan)
+    k_meta = crop_hwsd_meta.copy()
+
+    return k_arr, k_meta
 
 
 if __name__ == '__main__':
@@ -641,12 +710,9 @@ if __name__ == '__main__':
     ls_path = os.path.join(tmp_dir, "ls.tif")
     ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
 
-    # Process K
-    def produce_k():
-        import pyodbc
-        dbfile = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"
-        conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + dbfile + ';')
-        cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND FROM HWSD_DATA')
-        hwsd_dict = {}
-        for row in cursor.fetchall():
-            hwsd_dict[row[0]] = [row[1], row[2], row[3]]
+    # Produce k (Hors Europe)
+    k_arr, k_meta = produce_k(aoi_path)
+
+    # Write k raster
+    k_out = os.path.join(tmp_dir, "k.tif")
+    raster_utils.write(k_arr, k_out, k_meta, nodata=0)
