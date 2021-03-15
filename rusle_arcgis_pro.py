@@ -11,7 +11,7 @@ __update__ = ""
 __copyrights__ = "(c) SERTIT 2021"
 
 import os
-from typing import Union
+import logging
 import numpy as np
 import rasterio
 from rasterio import MemoryFile
@@ -22,8 +22,8 @@ import geopandas as gpd
 from rasterio.enums import Resampling
 from rasterstats import zonal_stats
 
-from sertit_utils.core import type_utils, sys_utils
-from sertit_utils.eo import raster_utils
+from sertit import strings, misc, rasters, files, logs
+from eoreader.bands.index import _no_data_divide, _norm_diff
 
 from pysheds.grid import Grid
 
@@ -31,78 +31,13 @@ import pyodbc
 
 np.seterr(divide='ignore', invalid='ignore')
 
+DEBUG = False
+LOGGER = logging.getLogger("rusle")
 
-def set_no_data(idx: np.ma.masked_array) -> np.ma.masked_array:
-    """
-    Set nodata to a masked array (replacing masked pixel values by the fill_value)
-    Args:
-        idx (np.ma.masked_array): Index
-
-    Returns:
-        np.ma.masked_array: Index with no data filled with correct values
-    """
-    # idx[idx.mask] = idx.fill_value
-    idx[idx.mask] = np.ma.masked
-    return idx
-
-
-def no_data_divide(band_1: Union[float, np.ma.masked_array], band_2: np.ma.masked_array) -> np.ma.masked_array:
-    """
-    Get the dicision taking into account the nodata between b1 and b2
-
-    Args:
-        band_1 (np.ma.masked_array): Band 1
-        band_2 (np.ma.masked_array): Band 2
-
-    Returns:
-        np.ma.masked_array: Division between band 1 and band 2
-    """
-    return set_no_data(np.divide(band_1, band_2))
-
-
-def norm_diff(band_1: np.ma.masked_array, band_2: np.ma.masked_array) -> np.ma.masked_array:
-    """
-    Get normalized difference index between band 1 and band 2:
-    (band_1 - band_2)/(band_1 + band_2)
-
-    Args:
-        band_1 (np.ma.masked_array): Band 1
-        band_2 (np.ma.masked_array): Band 2
-
-    Returns:
-        np.ma.masked_array: Normalized Difference between band 1 and band 2
-
-    """
-    return no_data_divide(band_1.astype(np.float32) - band_2.astype(np.float32),
-                          band_1.astype(np.float32) + band_2.astype(np.float32))
-
-
-def to_abspath(path_str):
-    """
-    Return the absolute path of the specified path and check if it exists
-
-    If not:
-
-    - If it is a file (aka has an extension), it raises an exception
-    - If it is a folder, it creates it
-
-    Args:
-        path_str (str): Path as a string (relative or absolute)
-
-    Returns:
-        str: Absolute path
-    """
-    abs_path = os.path.abspath(path_str)
-
-    if not os.path.exists(abs_path):
-        if os.path.splitext(abs_path)[1]:
-            # If the path specifies a file (with extension), it raises an exception
-            raise Exception("Non existing file: {}".format(abs_path))
-
-        # If the path specifies a folder, it creates it
-        os.makedirs(abs_path)
-
-    return abs_path
+WORLD_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"
+EUROPE_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\europe_countries_poly.shp"
+HWSD_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\hwsd.tif"
+DBFILE_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"
 
 
 def get_crs(raster_path: str) -> CRS:
@@ -154,6 +89,16 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
 
 
 def reproject_raster(src_file: str, dst_crs: str) -> str:
+    """
+    Reproject raster to dst crs
+    Args:
+        src_file (str): Raster path
+        dst_crs (CRS): dst CRS
+
+    Returns:
+        str: Reprojected raster path
+    """
+    LOGGER.debug("Reprojecting")
     # Extract crs of the dem
     with rasterio.open(src_file, "r") as src_dst:
         src_crs = src_dst.crs
@@ -171,7 +116,7 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
                 'height': height
             })
 
-            dst_file = os.path.join(os.path.splitext(src_file)[0] + "_reproj.tif")
+            dst_file = os.path.join(os.path.splitext(src_file)[0] + "_reproj_{}".format(str(dst_crs)[5:]))
             with rasterio.open(dst_file, 'w', **kwargs) as dst:
                 for i in range(1, src.count + 1):
                     reproject(
@@ -189,24 +134,25 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
         return src_file
 
 
-def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str):
+def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> (str, np.ndarray, dict):
     """
     Crop Raster to the AOI extent
     Args:
         aoi_path (str): AOI path
         raster_path (str): DEM path
-        tmp_dir (str): Temp dir where to store the cropped DEM
+        tmp_dir (str): Temp dir where the cropped Raster will be store
     Returns:
-        str: Cropped DEM path
+        str: Cropped Raster path
+        np.ndarray : ndarray of the cropped raster
+        dict : metadata of the cropped raster
     """
-
-    # LOGGER.info("Crop Raster to the AOI extent")
+    LOGGER.info("Crop Raster to the AOI extent")
     with rasterio.open(raster_path) as raster_dst:
         aoi = gpd.read_file(aoi_path)
         if aoi.crs != raster_dst.crs:
             aoi = aoi.to_crs(raster_dst.crs)
 
-        cropped_raster_arr, cropped_raster_tr = mask(raster_dst, aoi.envelope, crop=True)
+        cropped_raster_arr, cropped_raster_tr = rasters.crop(raster_dst, aoi.envelope)
         out_meta = raster_dst.meta
         out_meta.update({"height": cropped_raster_arr.shape[1],
                          "width": cropped_raster_arr.shape[2],
@@ -220,21 +166,34 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str):
         return cropped_raster_path, cropped_raster_arr, out_meta
 
 
-def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution: float):
+def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution: float) -> (np.ndarray, dict):
+    """
+    Produce the fcover index
+    Args:
+        red_path (str): Red band path
+        nir_path (str): nir band path
+        aoi_path (str): AOI path
+        tmp_dir (str) : Temp dir where the cropped Raster will be store
+
+    Returns:
+        np.ndarray : ndarray of the fcover raster
+        dict : metadata of the fcover raster
+    """
+
     # Read and resample red
     with rasterio.open(red_path) as red_dst:
-        red_band, _ = raster_utils.read(red_dst, output_resolution, Resampling.bilinear)
+        red_band, _ = rasters.read(red_dst, output_resolution, Resampling.bilinear)
 
     # Read and resample nir
     with rasterio.open(nir_path) as nir_dst:
-        nir_band, meta = raster_utils.read(nir_dst, output_resolution, Resampling.bilinear)
+        nir_band, meta = rasters.read(nir_dst, output_resolution, Resampling.bilinear)
 
     # Process ndvi
-    ndvi = norm_diff(nir_band, red_band)
+    ndvi = _norm_diff(nir_band, red_band)
 
     # Write ndvi
-    ndvi_path = os.path.join(to_abspath(tmp_dir), 'ndvi.tif')
-    raster_utils.write(ndvi, ndvi_path, meta, nodata=0)
+    ndvi_path = os.path.join(files.to_abspath(tmp_dir), 'ndvi.tif')
+    rasters.write(ndvi, ndvi_path, meta, nodata=0)
 
     # Extract crs of the image
     ref_crs = get_crs(ndvi_path)
@@ -247,7 +206,7 @@ def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resol
 
     # Open cropped_ndvi_path
     with rasterio.open(ndvi_crop_path) as ndvi_crop_dst:
-        ndvi_crop_band, meta_crop = raster_utils.read(ndvi_crop_dst)
+        ndvi_crop_band, meta_crop = rasters.read(ndvi_crop_dst)
 
     # Extract NDVI min and max inside the AOI
     ndvi_stat = zonal_stats(aoi_path, ndvi_crop_path, stats="min max")
@@ -255,12 +214,24 @@ def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resol
     ndvi_max = ndvi_stat[0]['max']
 
     # Fcover calculation
-    fcover_array = no_data_divide(ndvi_crop_band.astype(np.float32) - ndvi_min, ndvi_max - ndvi_min)
+    fcover_array = _no_data_divide(ndvi_crop_band.astype(np.float32) - ndvi_min, ndvi_max - ndvi_min)
 
     return fcover_array, meta_crop
 
 
 def update_raster(raster_path: str, shp_path: str, output_raster_path: str, value: int) -> (np.ndarray, dict):
+    """
+    Update raster values covered by the shape
+    Args:
+        raster_path (str): raster path
+        shp_path (str): shape path
+        output_raster_path (str): output raster path
+        value (int) : value set to the updated cells
+
+    Returns:
+        np.ndarray : ndarray of the updated raster
+        dict : metadata of the updated raster
+    """
     # Check if same crs
     with rasterio.open(raster_path) as raster_dst:
         shp = gpd.read_file(shp_path)
@@ -288,7 +259,18 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
     return out_image, out_meta
 
 
-def produce_c_arable(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir, world_countries_path: str):
+def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir) -> (np.ndarray, dict):
+    """
+    Produce C arable index over Europe
+    Args:
+        aoi_path (str): aoi path
+        raster_arr (np.ndarray): lulc array
+        meta_raster (dict): lulc metadata
+
+    Returns:
+        np.ndarray : ndarray of the c arable raster
+        dict : metadata of the c arable raster
+    """
     arable_c_dict = {
         "Finland": 0.231,
         'France': 0.20200000000,
@@ -316,11 +298,11 @@ def produce_c_arable(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir, wo
     # Reproject aoi to wgs84
     aoi = gpd.read_file(aoi_path)
     crs_4326 = CRS.from_epsg(4326)
-    if aoi.crs != crs_4326:
+    if aoi.crs != crs_4326 :
         aoi = aoi.to_crs(crs_4326)
 
     # Extract europe countries
-    world_countries = gpd.read_file(world_countries_path, bbox=aoi.envelope)
+    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # Initialize arable arr
@@ -345,8 +327,20 @@ def produce_c_arable(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir, wo
     return arable_c_arr, meta_arable_c
 
 
-# Ajouter les types corepondants (array ...)
-def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_path: str, lulc_type: str):
+def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_path: str, lulc_type: str) -> (
+        np.ndarray, dict):
+    """
+    Produce C index
+    Args:
+        lulc_arr (np.ndarray): lulc array
+        meta_lulc (dict): lulc metadata
+        fcover_arr (np.ndarray) :fcover array
+        aoi_path (str): aoi path
+
+    Returns:
+        np.ndarray : ndarray of the c index raster
+        dict : metadata of the c index raster
+    """
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
     if lulc_type == 'clc':
@@ -372,8 +366,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
             335: [0, 0]
         }
         # Produce arable c
-        world_countries_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"  # A mettre en variable globale
-        arable_c_arr, _ = produce_c_arable(aoi_path, lulc_arr, meta_lulc, world_countries_path)
+        arable_c_arr, _ = produce_c_arable_europe(aoi_path, lulc_arr, meta_lulc)
         c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
 
     elif lulc_type == 'glc':
@@ -458,8 +451,16 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
     return c_arr, meta_lulc
 
 
-def spatial_resolution(raster_path: str):
-    """extracts the XY Pixel Size"""
+def spatial_resolution(raster_path: str) -> (float, float):
+    """
+    Extract the spatial resolution of a raster X, Y
+    Args:
+        raster_path (str) : raster path
+
+    Returns:
+    float : X resolution
+    float :Y resolution
+    """
     raster = rasterio.open(raster_path)
     t = raster.transform
     x = t[0]
@@ -467,8 +468,19 @@ def spatial_resolution(raster_path: str):
     return x, y
 
 
-# Process LSfactor
-def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
+def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray, dict):
+    """
+    Produce the LS factor raster
+    Args:
+        dem_path (str) : dem path
+        ls_path (str) : ls index path
+        tmp_dir (str) : tmp dir path
+
+    Returns:
+        np.ndarray : ndarray of the ls factor raster
+        dict : metadata of the ls factor raster
+    """
+
     # Get slope path
     slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
 
@@ -476,11 +488,11 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
     cmd_slope_d = ["gdaldem",
                    "slope",
                    "-compute_edges",
-                   type_utils.to_cmd_string(dem_path),
-                   type_utils.to_cmd_string(slope_dem_d)]
+                   strings.to_cmd_string(dem_path),
+                   strings.to_cmd_string(slope_dem_d)]
 
     # Run command
-    sys_utils.run_command(cmd_slope_d)
+    misc.run_cli(cmd_slope_d)
 
     # Compute D8 flow directions
     grid = Grid.from_raster(dem_path, data_name='dem')
@@ -509,26 +521,26 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
 
     # Open acc
     with rasterio.open(acc_path) as acc_dst:
-        acc_band, meta = raster_utils.read(acc_dst)
+        acc_band, meta = rasters.read(acc_dst)
 
     # Open slope d
     with rasterio.open(slope_dem_d) as slope_dst:
-        slope_d, _ = raster_utils.read(slope_dst)
+        slope_d, _ = rasters.read(slope_dst)
 
     # Make slope percentage command
     slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
     cmd_slope_p = ["gdaldem",
                    "slope",
                    "-compute_edges",
-                   type_utils.to_cmd_string(dem_path),
-                   type_utils.to_cmd_string(slope_dem_p), "-p"]
+                   strings.to_cmd_string(dem_path),
+                   strings.to_cmd_string(slope_dem_p), "-p"]
 
     # Run command
-    sys_utils.run_command(cmd_slope_p)
+    misc.run_cli(cmd_slope_p)
 
     # Open slope p
     with rasterio.open(slope_dem_p) as slope_dst:
-        slope_p, _ = raster_utils.read(slope_dst)
+        slope_p, _ = rasters.read(slope_dst)
 
     # m calculation
     conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5), slope_p >= 5]
@@ -540,29 +552,34 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str):
         np.sin(slope_d.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 1.3 fixed ?
 
     # Write ls
-    raster_utils.write(ls_arr, ls_path, meta, nodata=0)
+    rasters.write(ls_arr, ls_path, meta, nodata=0)
 
     return ls_arr, meta
     # Process K
 
 
-# A mettre à jour avec les bons paramètres
-def produce_k(aoi_path: str):
-    hwsd_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\hwsd.tif"  # A ajouter dans les variables globales
-    dbfile_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"  # A ajouter dans les variables globales
+def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
+    """
+    Produce the K index outside Europe
+    Args:
+        aoi_path (str) : AOI path
 
+    Returns:
+        np.ndarray : ndarray of the K raster
+        dict : metadata of the K raster
+    """
     # Extract crs of the hwsd
-    with rasterio.open(hwsd_path, "r") as hwsd_dst:
+    with rasterio.open(HWSD_PATH, "r") as hwsd_dst:
         hwsd_crs = hwsd_dst.crs
 
     # Reproject the shp
     aoi_reproj_path = reproj_shp(aoi_path, hwsd_crs)
 
     # Crop hwsd
-    crop_hwsd_path, crop_hwsd_arr, crop_hwsd_meta = crop_raster(aoi_reproj_path, hwsd_path, tmp_dir)
+    crop_hwsd_path, crop_hwsd_arr, crop_hwsd_meta = crop_raster(aoi_reproj_path, HWSD_PATH, tmp_dir)
 
     # Extract soil information from ce access DB
-    conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + dbfile_path + ';')
+    conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + DBFILE_PATH + ';')
     cursor = conn.cursor()
     cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE FROM HWSD_DATA')
 
@@ -579,7 +596,7 @@ def produce_k(aoi_path: str):
             # Sand (%) –sand fraction content (0.05 –2mm)
             s_sand = row[3]
             # Organic matter (%)
-            a = row[4]
+            a = row[4] * 1.724
             # Soil structure code used in soil classification
             b = row[5]
             # Profile permeability class
@@ -613,6 +630,8 @@ def produce_k(aoi_path: str):
 
 
 if __name__ == '__main__':
+    # Logging
+    logs.init_logger(LOGGER, logging.DEBUG)
 
     ##### Load inputs (Only over europe yet)
     lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
@@ -636,7 +655,7 @@ if __name__ == '__main__':
 
     # Write fcover
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
-    raster_utils.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
+    rasters.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
     # ----- Process Cfactor
     # Extract crs of the lulc
@@ -654,11 +673,11 @@ if __name__ == '__main__':
 
     # Resample cropped lulc
     with rasterio.open(lulc_reprojected) as lulc_dst:
-        lulc_band, meta_lulc = raster_utils.read(lulc_dst, output_resolution, Resampling.nearest)
+        lulc_band, meta_lulc = rasters.read(lulc_dst, output_resolution, Resampling.nearest)
 
     # Write resample lulc raster
     lulc_update_path = os.path.join(tmp_dir, "lulc_resampled.tif")
-    raster_utils.write(lulc_band, lulc_update_path, meta_lulc, nodata=0)
+    rasters.write(lulc_band, lulc_update_path, meta_lulc, nodata=0)
 
     # Mask lulc with del
     if dem_path:
@@ -677,19 +696,19 @@ if __name__ == '__main__':
     recrop_lulc_path, recrop_lulc_arr, recrop_lulc_meta = crop_raster(aoi_reproj_path, lulc_update_path, tmp_dir)
 
     # Collocate both raster
-    collocated_lulc_arr, meta_lulc_collocated = raster_utils.collocate(meta_fcover, recrop_lulc_arr,
-                                                                       recrop_lulc_meta, Resampling.nearest)
+    collocated_lulc_arr, meta_lulc_collocated = rasters.collocate(meta_fcover, recrop_lulc_arr,
+                                                                  recrop_lulc_meta, Resampling.nearest)
 
     # Write collocated lulc raster
     collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
-    raster_utils.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
+    rasters.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
 
     # ----- Process C
     c_arr, c_meta = produce_c(collocated_lulc_arr, meta_lulc_collocated, fcover_arr, aoi_path, 'clc')
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
-    raster_utils.write(c_arr, c_out, c_meta, nodata=0)
+    rasters.write(c_arr, c_out, c_meta, nodata=0)
 
     # ----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
 
@@ -711,8 +730,8 @@ if __name__ == '__main__':
     ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
 
     # Produce k (Hors Europe)
-    k_arr, k_meta = produce_k(aoi_path)
+    k_arr, k_meta = produce_k_outside_europe(aoi_path)
 
     # Write k raster
     k_out = os.path.join(tmp_dir, "k.tif")
-    raster_utils.write(k_arr, k_out, k_meta, nodata=0)
+    rasters.write(k_arr, k_out, k_meta, nodata=0)
