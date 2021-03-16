@@ -712,7 +712,7 @@ if __name__ == '__main__':
 
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
 
-    location = "Eurpe" # Faire une fonction pour detecter si en europe ou non
+    location = "Europe" # Faire une fonction pour detecter si en europe ou non
 
     output_resolution = 5
 
@@ -729,8 +729,8 @@ if __name__ == '__main__':
         p_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
         # Dict that store raster to pre_process
-        raster_dict = {"red_band": red_path,
-                       "nir_band": nir_path,
+        raster_dict = {"red": red_path,
+                       "nir": nir_path,
                        "r": r_path,
                        "k": k_path,
                        "ls": ls_path,
@@ -756,8 +756,8 @@ if __name__ == '__main__':
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
         # Dict that store raster to pre_process
-        raster_dict = {"red_band": red_path,
-                       "nir_band": nir_path,
+        raster_dict = {"red": red_path,
+                       "nir": nir_path,
                        "r": r_path,
                        "k": k_path,
                        "dem": dem_path,
@@ -775,7 +775,9 @@ if __name__ == '__main__':
         ls_factor_arr, meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
 
     # Process fcover
-    fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir)
+    red_process_path = post_process_dict["red"]
+    nir_process_path = post_process_dict["nir"]
+    fcover_arr, meta_fcover = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir)
 
     # Write fcover
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
