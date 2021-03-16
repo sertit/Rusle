@@ -71,8 +71,14 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
     # Reproj shape vector if needed
     vec = gpd.read_file(shp_path)
     if vec.crs != raster_crs:
-        # LOGGER.info("Reproject shp vector to CRS %s", raster_crs)
-        reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj_{}".format(str(raster_crs)[5:]))
+        LOGGER.info("Reproject shp vector to CRS %s", str(raster_crs))
+        # A modifier start
+        if not "EPSG:" in str(raster_crs):
+            epsg_code = "custom"
+        else:
+            epsg_code = str(raster_crs)[5:]
+        # A modifier end
+        reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj_{}".format(epsg_code))
 
         # Check if reproject shp already exist
         if os.path.isfile(reproj_vec) == False:
@@ -471,7 +477,7 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     Produce the LS factor raster
     Args:
         dem_path (str) : dem path
-        ls_path (str) : ls index path
+        ls_path (str) : output ls index path
         tmp_dir (str) : tmp dir path
 
     Returns:
@@ -627,12 +633,12 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
     return k_arr, k_meta
 
 
-def collocate_raster_list(aoi_path: str, dst_resolution: int, dst_proj: str, raster_path_dict: dict,
+def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
     out_dict = {}
 
     # Reproject aoi
-    aoi_ref_path = reproj_shp(aoi_path, dst_proj)
+    aoi_ref_path = reproj_shp(aoi_path, dst_crs)
 
     # Loop on path into the dict
     for i, key in enumerate(raster_path_dict):
@@ -648,7 +654,7 @@ def collocate_raster_list(aoi_path: str, dst_resolution: int, dst_proj: str, ras
         raster_crop_path, _, _ = crop_raster(aoi_reproj_path, raster_path, tmp_dir)
 
         # Reproject LULC
-        raster_reproj_path = reproject_raster(raster_crop_path, dst_proj)
+        raster_reproj_path = reproject_raster(raster_crop_path, dst_crs)
 
         # Resample reproj raster
         with rasterio.open(raster_reproj_path) as raster_reproj_dst:
@@ -661,7 +667,7 @@ def collocate_raster_list(aoi_path: str, dst_resolution: int, dst_proj: str, ras
 
         # --- A voir avec Remi si necessaire de re-crop
         # Re crop raster
-        raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_band, tmp_dir)
+        raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
 
         # Add path to the dictionary
         if i == 0:
@@ -680,20 +686,24 @@ def collocate_raster_list(aoi_path: str, dst_resolution: int, dst_proj: str, ras
                 raster_recrop_band, raster_recrop_meta = rasters.read(raster_recrop_dst)
 
             # Collocate raster
-            raster_collocate_path = rasters.collocate(meta_ref, raster_recrop_band,
+            raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_recrop_band,
                                                       raster_recrop_meta, Resampling.nearest)
+
+            # Write collocated raster
+            raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
+            rasters.write(raster_collocate_arr, raster_collocate_path, raster_collocate_meta, nodata=0)
+
             # Store path result in a dict
             out_dict[key] = raster_collocate_path
 
-    return out_dict # Ajouter pour masquer les raster
+    return out_dict  # Ajouter == > masquer les raster
+
 
 if __name__ == '__main__':
     # Logging
     logs.init_logger(LOGGER, logging.DEBUG)
 
-    ##### Load inputs (Only over europe yet)
-    lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-    dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_wgs84.tif"
+    ##### Load inputs
     nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B08_10m.jp2"
     red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B04_10m.jp2"
 
@@ -702,11 +712,67 @@ if __name__ == '__main__':
 
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
 
+    location = "Eurpe" # Faire une fonction pour detecter si en europe ou non
+
     output_resolution = 5
 
     ref_crs = get_crs(red_path)
 
-    # ----- Process Fcover
+    if location == "Europe":
+
+        landcover_name = 'clc'  # Laisser la possibilité de changer
+
+        r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
+        k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
+        ls_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\LS_100m\EU_LS_Mosaic_100m.tif"
+        lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
+        p_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
+
+        # Dict that store raster to pre_process
+        raster_dict = {"red_band": red_path,
+                       "nir_band": nir_path,
+                       "r": r_path,
+                       "k": k_path,
+                       "ls": ls_path,
+                       "lulc": lulc_path,
+                       "p": p_path
+                       }
+
+        # Run pre process
+        post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
+                                                  tmp_dir)
+
+    else:
+        landcover_name = 'clc'
+
+        r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
+        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_wgs84.tif"
+        lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
+
+        # Produce k
+        k_arr, k_meta = produce_k_outside_europe(aoi_path)
+        # Write k raster
+        k_path = os.path.join(tmp_dir, 'k_raw.tif')
+        rasters.write(k_arr, k_path, k_meta, nodata=0)
+
+        # Dict that store raster to pre_process
+        raster_dict = {"red_band": red_path,
+                       "nir_band": nir_path,
+                       "r": r_path,
+                       "k": k_path,
+                       "dem": dem_path,
+                       "lulc": lulc_path
+                       }
+
+        # Run pre process
+        post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
+                                                  tmp_dir)
+
+        # Produce ls
+        dem_process_path = post_process_dict["dem"]
+        ls_path = os.path.join(tmp_dir, "ls.tif")
+        LOGGER.info("Reproject shp vector to CRS %s", str(post_process_dict["dem"]))
+        ls_factor_arr, meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
 
     # Process fcover
     fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir)
@@ -715,81 +781,23 @@ if __name__ == '__main__':
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
     rasters.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
-    # ----- Process Cfactor
-    # Extract crs of the lulc
-    with rasterio.open(lulc_path, "r") as lulc_dst:
-        lulc_crs = lulc_dst.crs
-
-    # Reproject the shp
-    aoi_reproj_lulc_path = reproj_shp(aoi_path, lulc_crs)
-
-    # Crop the lulc with reprojected AOI
-    cropped_lulc_path, _, _ = crop_raster(aoi_reproj_lulc_path, lulc_path, tmp_dir)
-
-    # Reproject LULC
-    lulc_reprojected = reproject_raster(cropped_lulc_path, ref_crs)
-
-    # Resample cropped lulc
-    with rasterio.open(lulc_reprojected) as lulc_dst:
-        lulc_band, meta_lulc = rasters.read(lulc_dst, output_resolution, Resampling.nearest)
-
-    # Write resample lulc raster
-    lulc_update_path = os.path.join(tmp_dir, "lulc_resampled.tif")
-    rasters.write(lulc_band, lulc_update_path, meta_lulc, nodata=0)
-
+    # Process Cfactor
     # Mask lulc with del
-    if dem_path:
+    if del_path:
         # Reproject del
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
+        lulc_process_path = post_process_dict["lulc"]
         lulc_masked_path = os.path.join(tmp_dir, "lulc_masked.tif")
-        lulc_band, meta_lulc = update_raster(lulc_update_path, reproj_del, lulc_masked_path,
-                                             334)
-        lulc_update_path = lulc_masked_path
+        lulc_masked_arr, lulc_masked_meta = update_raster(lulc_process_path, reproj_del, lulc_masked_path,
+                                                          334)
 
-    # Reproject the shp
-    aoi_reproj_path = reproj_shp(aoi_path, ref_crs)
-    # Re Crop the lulc with AOI
-    recrop_lulc_path, recrop_lulc_arr, recrop_lulc_meta = crop_raster(aoi_reproj_path, lulc_update_path, tmp_dir)
+    # Rajouter si pas de del
 
-    # Collocate both raster
-    collocated_lulc_arr, meta_lulc_collocated = rasters.collocate(meta_fcover, recrop_lulc_arr,
-                                                                  recrop_lulc_meta, Resampling.nearest)
-
-    # Write collocated lulc raster
-    collocated_lulc_resampled = os.path.join(tmp_dir, "lulc_collocated.tif")
-    rasters.write(collocated_lulc_arr, collocated_lulc_resampled, meta_lulc_collocated, nodata=0)
-
-    # ----- Process C
-    c_arr, c_meta = produce_c(collocated_lulc_arr, meta_lulc_collocated, fcover_arr, aoi_path, 'clc')
+    # Process C
+    c_arr, c_meta = produce_c(lulc_masked_arr, lulc_masked_meta, fcover_arr, aoi_path, landcover_name)
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     rasters.write(c_arr, c_out, c_meta, nodata=0)
-
-    # ----- Process LS Factor ==> Travailler sur le DEM resample ou resample le résultat ?
-
-    # Extract crs of the dem
-    with rasterio.open(dem_path, "r") as dem_dst:
-        dem_crs = dem_dst.crs
-
-    # Reproject the shp
-    aoi_path_reproj = reproj_shp(aoi_path, dem_crs)
-
-    # Crop DEM
-    cropped_dem_path, _, _ = crop_raster(aoi_path_reproj, dem_path, tmp_dir)
-
-    # Reproject dem
-    dem_reprojected = reproject_raster(cropped_dem_path, ref_crs)
-
-    # Produce ls factor
-    ls_path = os.path.join(tmp_dir, "ls.tif")
-    ls_factor_arr, meta = produce_ls_factor(dem_reprojected, ls_path, tmp_dir)
-
-    # Produce k (Hors Europe)
-    k_arr, k_meta = produce_k_outside_europe(aoi_path)
-
-    # Write k raster
-    k_out = os.path.join(tmp_dir, "k.tif")
-    rasters.write(k_arr, k_out, k_meta, nodata=0)
