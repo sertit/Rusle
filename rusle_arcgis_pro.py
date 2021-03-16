@@ -68,19 +68,17 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
     Returns:
         str: Reprojected delineation path
     """
-    # Reproj delineation vector if nedded
+    # Reproj shape vector if needed
     vec = gpd.read_file(shp_path)
     if vec.crs != raster_crs:
         # LOGGER.info("Reproject shp vector to CRS %s", raster_crs)
         reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj_{}".format(str(raster_crs)[5:]))
 
-        # Delete reprojected vector if existing
-        if os.path.isfile(reproj_vec):
-            os.remove(reproj_vec)
-
-        # Reproject vector and write to file
-        vec = vec.to_crs(raster_crs)
-        vec.to_file(reproj_vec, driver="ESRI Shapefile")
+        # Check if reproject shp already exist
+        if os.path.isfile(reproj_vec) == False:
+            # Reproject vector and write to file
+            vec = vec.to_crs(raster_crs)
+            vec.to_file(reproj_vec, driver="ESRI Shapefile")
 
         return reproj_vec
 
@@ -166,7 +164,7 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> (str, np.ndarr
         return cropped_raster_path, cropped_raster_arr, out_meta
 
 
-def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resolution: float) -> (np.ndarray, dict):
+def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str) -> (np.ndarray, dict):
     """
     Produce the fcover index
     Args:
@@ -182,11 +180,11 @@ def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str, output_resol
 
     # Read and resample red
     with rasterio.open(red_path) as red_dst:
-        red_band, _ = rasters.read(red_dst, output_resolution, Resampling.bilinear)
+        red_band, _ = rasters.read(red_dst)
 
     # Read and resample nir
     with rasterio.open(nir_path) as nir_dst:
-        nir_band, meta = rasters.read(nir_dst, output_resolution, Resampling.bilinear)
+        nir_band, meta = rasters.read(nir_dst)
 
     # Process ndvi
     ndvi = _norm_diff(nir_band, red_band)
@@ -298,7 +296,7 @@ def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: 
     # Reproject aoi to wgs84
     aoi = gpd.read_file(aoi_path)
     crs_4326 = CRS.from_epsg(4326)
-    if aoi.crs != crs_4326 :
+    if aoi.crs != crs_4326:
         aoi = aoi.to_crs(crs_4326)
 
     # Extract europe countries
@@ -629,6 +627,66 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
     return k_arr, k_meta
 
 
+def collocate_raster_list(aoi_path: str, dst_resolution: int, dst_proj: str, raster_path_dict: dict,
+                          tmp_dir: str) -> dict:
+    out_dict = {}
+
+    # Reproject aoi
+    aoi_ref_path = reproj_shp(aoi_path, dst_proj)
+
+    # Loop on path into the dict
+    for i, key in enumerate(raster_path_dict):
+        # Extract raster crs
+        raster_path = raster_path_dict[key]
+        with rasterio.open(raster_path, "r") as raster_dst:
+            raster_crs = raster_dst.crs
+
+        # Reproject aoi
+        aoi_reproj_path = reproj_shp(aoi_path, raster_crs)
+
+        # Crop raster
+        raster_crop_path, _, _ = crop_raster(aoi_reproj_path, raster_path, tmp_dir)
+
+        # Reproject LULC
+        raster_reproj_path = reproject_raster(raster_crop_path, dst_proj)
+
+        # Resample reproj raster
+        with rasterio.open(raster_reproj_path) as raster_reproj_dst:
+            raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
+                                                                      Resampling.nearest)
+
+        # Write resample raster
+        raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
+        rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
+
+        # --- A voir avec Remi si necessaire de re-crop
+        # Re crop raster
+        raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_band, tmp_dir)
+
+        # Add path to the dictionary
+        if i == 0:
+
+            # Open the raster
+            with rasterio.open(raster_recrop_path) as raster_recrop_dst:
+                _, meta_ref = rasters.read(raster_recrop_dst)
+
+            # Store path result in a dict
+            out_dict[key] = raster_recrop_path
+
+        else:
+
+            # Open the raster
+            with rasterio.open(raster_recrop_path) as raster_recrop_dst:
+                raster_recrop_band, raster_recrop_meta = rasters.read(raster_recrop_dst)
+
+            # Collocate raster
+            raster_collocate_path = rasters.collocate(meta_ref, raster_recrop_band,
+                                                      raster_recrop_meta, Resampling.nearest)
+            # Store path result in a dict
+            out_dict[key] = raster_collocate_path
+
+    return out_dict # Ajouter pour masquer les raster
+
 if __name__ == '__main__':
     # Logging
     logs.init_logger(LOGGER, logging.DEBUG)
@@ -651,7 +709,7 @@ if __name__ == '__main__':
     # ----- Process Fcover
 
     # Process fcover
-    fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir, output_resolution)
+    fcover_arr, meta_fcover = produce_fcover(red_path, nir_path, aoi_path, tmp_dir)
 
     # Write fcover
     fcover_path = os.path.join(tmp_dir, "fcover.tif")
