@@ -690,27 +690,32 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         # Resample reproj raster
         with rasterio.open(raster_reproj_path) as raster_reproj_dst:
             raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
-                                                                      Resampling.nearest)
+                                                                      Resampling.bilinear)
 
         # Write resample raster
         raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
         rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
 
         # Re crop raster                        # --- A voir avec Remi si necessaire de re-crop
-        raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
+        raster_recrop_path, _, raster_recrop_meta = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
 
         # Add path to the dictionary
         if i == 0:
 
-            # Open the raster
-            with rasterio.open(raster_recrop_path) as raster_recrop_dst:
-                _, meta_ref = rasters.read(raster_recrop_dst)
-
-            # Update the dtype of the ref metadata
-            meta_ref.update({'dtype': np.float32})
+            # Mask raster with AOI
+            aoi_ref_gpd = gpd.read_file(aoi_ref_path)
+            geoms = [feature for feature in aoi_ref_gpd['geometry']]
+            raster_recrop_arr, _ = rasters.mask(raster_recrop_path, geoms)  # A update après upgrade de Rémi de rasters
+            # Write masked raster
+            raster_masked_path = os.path.join(tmp_dir, "{}_resample_masked.tif".format(key))
+            rasters.write(raster_recrop_arr, raster_masked_path, raster_recrop_meta, nodata=0)
 
             # Store path result in a dict
-            out_dict[key] = raster_recrop_path
+            out_dict[key] = raster_masked_path
+
+            # Update the dtype of the ref metadata
+            meta_ref = raster_recrop_meta.copy()
+            meta_ref.update({'dtype': np.float32})
 
         else:
 
@@ -726,11 +731,18 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
             rasters.write(raster_collocate_arr, raster_collocate_path, raster_collocate_meta, nodata=0)
 
+            # Mask raster with AOI
+            aoi_ref_gpd = gpd.read_file(aoi_ref_path)
+            geoms = [feature for feature in aoi_ref_gpd['geometry']]
+            raster_recrop_arr, _ = rasters.mask(raster_collocate_path,
+                                                geoms)  # A update après upgrade de Rémi de rasters
+            # Write masked raster
+            raster_masked_path = os.path.join(tmp_dir, "{}_resample_masked.tif".format(key))
+            rasters.write(raster_recrop_arr, raster_masked_path, raster_collocate_meta, nodata=0)
+
             # Store path result in a dict
-            out_dict[key] = raster_collocate_path
+            out_dict[key] = raster_masked_path
 
-
-        
     return out_dict
 
 
@@ -769,7 +781,7 @@ if __name__ == '__main__':
 
     ref_crs = get_crs(red_path)
 
-    location = "Europe"  # Faire une fonction pour detecter si en europe ou non
+    location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
 
     if location == "Europe":
 
@@ -841,12 +853,23 @@ if __name__ == '__main__':
         dem_process_path = post_process_dict["dem"]
         ls_path = os.path.join(tmp_dir, "ls.tif")
         LOGGER.info("Reproject shp vector to CRS %s", str(post_process_dict["dem"]))
-        ls_factor_arr, ls_factor_meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
+        ls_arr, ls_meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
 
         # Produce p
         p_value = 1  # Can change
-        p_arr = ls_factor_arr.copy()
+        p_arr = ls_arr.copy()
         p_arr.fill(p_value)
+        # Write p
+        p_path = os.path.join(tmp_dir, "p.tif")
+        rasters.write(p_arr, p_path, ls_meta, nodata=0)
+
+        # Open the r raster
+        with rasterio.open(post_process_dict["r"]) as r_dst:
+            r_arr, _ = rasters.read(r_dst)
+
+        # Open the k raster
+        with rasterio.open(post_process_dict["k"]) as k_dst:
+            k_arr, _ = rasters.read(k_dst)
 
     # Process fcover
     red_process_path = post_process_dict["red"]
