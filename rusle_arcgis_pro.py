@@ -120,7 +120,7 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
                 'height': height
             })
 
-            dst_file = os.path.join(os.path.splitext(src_file)[0] + "_reproj_{}".format(str(dst_crs)[5:]))
+            dst_file = os.path.join(os.path.splitext(src_file)[0] + "_reproj_{}.tif".format(str(dst_crs)[5:]))
             with rasterio.open(dst_file, 'w', **kwargs) as dst:
                 for i in range(1, src.count + 1):
                     reproject(
@@ -585,7 +585,26 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
     # Extract soil information from ce access DB
     conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + DBFILE_PATH + ';')
     cursor = conn.cursor()
-    cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE FROM HWSD_DATA')
+    cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE, DRAINAGE FROM HWSD_DATA')
+
+    # Dictionaries that store the link between the RUSLE codes (P16 methodo) and the HWSD DB codes
+    # Key = TEXTURE(HWSD), value = b
+    b_dict = {
+        0: np.nan,
+        1: 4,
+        2: 3,
+        3: 2
+    }
+    # Key = DRAINAGE(HWSD), value = c
+    c_dict = {
+        1: 6,
+        2: 5,
+        3: 4,
+        4: 3,
+        5: 2,
+        6: 1,
+        7: 1
+    }
 
     # K calculation for each type of values
     k_dict = {}
@@ -602,9 +621,9 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
             # Organic matter (%)
             a = row[4] * 1.724
             # Soil structure code used in soil classification
-            b = row[5]
+            b = b_dict[row[5]]
             # Profile permeability class
-            c = 1
+            c = c_dict[row[6]]
 
             # VFS (%) –very fine sand fraction content (0.05 –0.1 mm)
             vfs = (0.74 - (0.62 * s_sand / 100)) * s_sand
@@ -635,6 +654,18 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
 
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
+    """
+    Pre process a list of raster (clip, reproj, collocate)
+    Args:
+        aoi_path (str) : AOI path
+        dst_resolution (int) : resolution of the output raster files
+        dst_crs (str) : CRS of the output files
+        raster_path_dict : dictionary that store the list of raster (key = alias : value : raster path)
+        tmp_dir (str) : tmp directory
+
+    Returns:
+        dict : dictionary that store the list of pre process raster (key = alias : value : raster path)
+    """
     out_dict = {}
 
     # Reproject aoi
@@ -665,8 +696,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
         rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
 
-        # --- A voir avec Remi si necessaire de re-crop
-        # Re crop raster
+        # Re crop raster                        # --- A voir avec Remi si necessaire de re-crop
         raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
 
         # Add path to the dictionary
@@ -675,6 +705,9 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             # Open the raster
             with rasterio.open(raster_recrop_path) as raster_recrop_dst:
                 _, meta_ref = rasters.read(raster_recrop_dst)
+
+            # Update the dtype of the ref metadata
+            meta_ref.update({'dtype': np.float32})
 
             # Store path result in a dict
             out_dict[key] = raster_recrop_path
@@ -687,7 +720,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
 
             # Collocate raster
             raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_recrop_band,
-                                                      raster_recrop_meta, Resampling.nearest)
+                                                                            raster_recrop_meta, Resampling.nearest)
 
             # Write collocated raster
             raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
@@ -696,7 +729,27 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             # Store path result in a dict
             out_dict[key] = raster_collocate_path
 
-    return out_dict  # Ajouter == > masquer les raster
+
+        
+    return out_dict
+
+
+def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_arr: np.ndarray,
+                  p_arr: np.ndarray) -> np.ndarray:
+    """
+    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
+    Args:
+        r_arr (np.ndarray): multi-annual average index array
+        k_arr (np.ndarray): susceptibility of a soil to erode array
+        ls_arr (np.ndarray) :combined Slope Length and Slope Steepness factor array
+        c_arr (np.ndarray) : Cover management factor array
+        p_arr (np.ndarray) : support practices factor array
+
+    Returns:
+        np.ndarray : ndarray of the average annual soil loss (ton/ha/year)
+    """
+
+    return r_arr * k_arr * ls_arr * c_arr * p_arr
 
 
 if __name__ == '__main__':
@@ -707,16 +760,16 @@ if __name__ == '__main__':
     nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B08_10m.jp2"
     red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B04_10m.jp2"
 
-    aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\aoi.shp"
+    aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\aoi - Copie.shp"
     del_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
 
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
 
-    location = "Europe" # Faire une fonction pour detecter si en europe ou non
-
     output_resolution = 5
 
     ref_crs = get_crs(red_path)
+
+    location = "Europe"  # Faire une fonction pour detecter si en europe ou non
 
     if location == "Europe":
 
@@ -741,6 +794,22 @@ if __name__ == '__main__':
         # Run pre process
         post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
                                                   tmp_dir)
+
+        # Open the r raster
+        with rasterio.open(post_process_dict["r"]) as r_dst:
+            r_arr, _ = rasters.read(r_dst)
+
+        # Open the k raster
+        with rasterio.open(post_process_dict["k"]) as k_dst:
+            k_arr, _ = rasters.read(k_dst)
+
+        # Open the ls raster
+        with rasterio.open(post_process_dict["ls"]) as ls_dst:
+            ls_arr, _ = rasters.read(ls_dst)
+
+        # Open the p raster
+        with rasterio.open(post_process_dict["p"]) as p_dst:
+            p_arr, _ = rasters.read(p_dst)
 
     else:
         landcover_name = 'clc'
@@ -772,7 +841,12 @@ if __name__ == '__main__':
         dem_process_path = post_process_dict["dem"]
         ls_path = os.path.join(tmp_dir, "ls.tif")
         LOGGER.info("Reproject shp vector to CRS %s", str(post_process_dict["dem"]))
-        ls_factor_arr, meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
+        ls_factor_arr, ls_factor_meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
+
+        # Produce p
+        p_value = 1  # Can change
+        p_arr = ls_factor_arr.copy()
+        p_arr.fill(p_value)
 
     # Process fcover
     red_process_path = post_process_dict["red"]
@@ -784,7 +858,7 @@ if __name__ == '__main__':
     rasters.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
     # Process Cfactor
-    # Mask lulc with del
+    # Mask lulc if del
     if del_path:
         # Reproject del
         reproj_del = reproj_shp(del_path, ref_crs)
@@ -792,14 +866,22 @@ if __name__ == '__main__':
         # Update the lulc with the DEL
         lulc_process_path = post_process_dict["lulc"]
         lulc_masked_path = os.path.join(tmp_dir, "lulc_masked.tif")
-        lulc_masked_arr, lulc_masked_meta = update_raster(lulc_process_path, reproj_del, lulc_masked_path,
-                                                          334)
-
-    # Rajouter si pas de del
+        lulc_arr, lulc_meta = update_raster(lulc_process_path, reproj_del, lulc_masked_path,
+                                            334)
+    else:
+        # Open the lulc raster
+        with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
+            lulc_arr, lulc_meta = rasters.read(lulc_dst)
 
     # Process C
-    c_arr, c_meta = produce_c(lulc_masked_arr, lulc_masked_meta, fcover_arr, aoi_path, landcover_name)
-
+    c_arr, c_meta = produce_c(lulc_arr, lulc_meta, fcover_arr, aoi_path, landcover_name)
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     rasters.write(c_arr, c_out, c_meta, nodata=0)
+
+    # Produce a with RUSLE model
+    a_meta = meta_fcover.copy()
+    a_arr = produce_a_arr(r_arr, k_arr, ls_arr, c_arr, p_arr)
+    # Write the a raster
+    a_path = os.path.join(tmp_dir, "a_rusle.tif")
+    rasters.write(a_arr, a_path, a_meta, nodata=0)
