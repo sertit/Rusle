@@ -103,6 +103,7 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
         str: Reprojected raster path
     """
     LOGGER.debug("Reprojecting")
+
     # Extract crs of the dem
     with rasterio.open(src_file, "r") as src_dst:
         src_crs = src_dst.crs
@@ -151,23 +152,19 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> (str, np.ndarr
         dict : metadata of the cropped raster
     """
     LOGGER.info("Crop Raster to the AOI extent")
+
     with rasterio.open(raster_path) as raster_dst:
         aoi = gpd.read_file(aoi_path)
         if aoi.crs != raster_dst.crs:
             aoi = aoi.to_crs(raster_dst.crs)
 
-        cropped_raster_arr, cropped_raster_tr = rasters.crop(raster_dst, aoi.envelope)
-        out_meta = raster_dst.meta
-        out_meta.update({"height": cropped_raster_arr.shape[1],
-                         "width": cropped_raster_arr.shape[2],
-                         "transform": cropped_raster_tr})
+        cropped_raster_arr, cropped_raster_meta = rasters.crop(raster_dst, aoi.envelope)
 
         cropped_raster_path = os.path.join(tmp_dir,
                                            os.path.basename(os.path.splitext(raster_path)[0]) + '_cropped.tif')
-        with rasterio.open(cropped_raster_path, "w", **out_meta) as dest:
-            dest.write(cropped_raster_arr)
+        rasters.write(cropped_raster_arr, cropped_raster_path, cropped_raster_meta, nodata=0)
 
-        return cropped_raster_path, cropped_raster_arr, out_meta
+        return cropped_raster_path, cropped_raster_arr, cropped_raster_meta
 
 
 def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str) -> (np.ndarray, dict):
@@ -183,6 +180,7 @@ def produce_fcover(red_path, nir_path, aoi_path: str, tmp_dir: str) -> (np.ndarr
         np.ndarray : ndarray of the fcover raster
         dict : metadata of the fcover raster
     """
+    LOGGER.info("-- Produce the fcover index --")
 
     # Read and resample red
     with rasterio.open(red_path) as red_dst:
@@ -236,6 +234,9 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
         np.ndarray : ndarray of the updated raster
         dict : metadata of the updated raster
     """
+
+    # LOGGER.info("-- Update raster values covered by the shape --")
+
     # Check if same crs
     with rasterio.open(raster_path) as raster_dst:
         shp = gpd.read_file(shp_path)
@@ -247,20 +248,12 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
 
     # Mask the raster with the geometries
     with rasterio.open(raster_path) as src:
-        out_image, out_transform = mask(src, geoms, invert=True, nodata=value)
-        out_meta = src.meta.copy()
+        out_arr, out_meta = rasters.mask(src, geoms, invert=True, nodata=value)
 
-    # Create output meta
-    out_meta.update({"driver": "GTiff",
-                     "height": out_image.shape[1],
-                     "width": out_image.shape[2],
-                     "transform": out_transform})
+    # Write raster
+    rasters.write(out_arr, output_raster_path, out_meta, nodata=0)
 
-    # Write de raster masked
-    with rasterio.open(output_raster_path, "w", **out_meta) as dest:
-        dest.write(out_image)
-
-    return out_image, out_meta
+    return out_arr, out_meta
 
 
 def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: dir) -> (np.ndarray, dict):
@@ -275,6 +268,9 @@ def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: 
         np.ndarray : ndarray of the c arable raster
         dict : metadata of the c arable raster
     """
+
+    LOGGER.info("-- Produce C arable index over Europe --")
+
     arable_c_dict = {
         "Finland": 0.231,
         'France': 0.20200000000,
@@ -306,7 +302,7 @@ def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: 
         aoi = aoi.to_crs(crs_4326)
 
     # Extract europe countries
-    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
+    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox= aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # Initialize arable arr
@@ -345,6 +341,8 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
         np.ndarray : ndarray of the c index raster
         dict : metadata of the c index raster
     """
+    LOGGER.info("-- Produce C index --")
+
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
     if lulc_type == 'clc':
@@ -440,7 +438,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
     conditions = []
     choices = []
 
-    # Liste condition and choices for C non arable
+    # List conditions and choices for C non arable
     for key in cfactor_dict:
         conditions.append(lulc_arr == key)
         choices.append(cfactor_dict[key][0] + (cfactor_dict[key][1] - cfactor_dict[key][0]) * (
@@ -485,6 +483,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         dict : metadata of the ls factor raster
     """
 
+    LOGGER.info("-- Produce the LS factor --")
+
     # Get slope path
     slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
 
@@ -502,12 +502,12 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     grid = Grid.from_raster(dem_path, data_name='dem')
 
     # Fill dem
-    #grid.fill_depressions(data='dem', out_name='filled_dem')
+    grid.fill_depressions(data='dem', out_name='filled_dem')
 
     # Resolve flat
-    grid.resolve_flats(data='dem', out_name='inflated_dem')
+    grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
 
-    grid.flowdir('inflated_dem', out_name='dir')
+    grid.flowdir('dem', out_name='dir')
 
     # Export flow directions
     dir_path = os.path.join(tmp_dir, 'dir.tif')
@@ -559,7 +559,6 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     rasters.write(ls_arr, ls_path, meta, nodata=0)
 
     return ls_arr, meta
-    # Process K
 
 
 def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
@@ -572,6 +571,9 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
         np.ndarray : ndarray of the K raster
         dict : metadata of the K raster
     """
+
+    LOGGER.info("-- Produce the K index outside Europe --")
+
     # Extract crs of the hwsd
     with rasterio.open(HWSD_PATH, "r") as hwsd_dst:
         hwsd_crs = hwsd_dst.crs
@@ -652,7 +654,6 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
     return k_arr, k_meta
 
 
-
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
     """
@@ -667,6 +668,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     Returns:
         dict : dictionary that store the list of pre process raster (key = alias : value : raster path)
     """
+    LOGGER.info("-- RASTER PRE PROCESSING --")
     out_dict = {}
 
     # Reproject aoi
@@ -675,36 +677,38 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     # Loop on path into the dict
     for i, key in enumerate(raster_path_dict):
 
+        LOGGER.info('********* {} ********'.format(key))
         # Store raster path
         raster_path = raster_path_dict[key][0]
 
         # Crop raster
-        raster_crop_path, _, _ = crop_raster(aoi_path, raster_path, tmp_dir)
-
-        # Reproject LULC
-        raster_reproj_path = reproject_raster(raster_crop_path, dst_crs)
-
-        # Resample reproj raster
-        with rasterio.open(raster_reproj_path) as raster_reproj_dst:
-            raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
-                                                                      raster_path_dict[key][1])
-
-        # Write resample raster
-        raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
-        rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
-
-        # Re crop raster                        # --- A voir avec Remi si necessaire de re-crop
-        raster_recrop_path, _, raster_recrop_meta = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
+        raster_crop_path, raster_crop_arr, raster_crop_meta = crop_raster(aoi_path, raster_path, tmp_dir)
 
         # Add path to the dictionary
         if i == 0:
 
+            # Reproject raster
+            raster_reproj_path = reproject_raster(raster_crop_path, dst_crs)
+
+            # Resample reproj raster
+            with rasterio.open(raster_reproj_path) as raster_reproj_dst:
+                raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
+                                                                          raster_path_dict[key][1])
+            # Write resample raster
+            raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
+            rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
+
+            # Re crop raster
+            raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
+
             # Mask raster with AOI
+            LOGGER.info('Masking with AOI')
             aoi_ref_gpd = gpd.read_file(aoi_ref_path)
             geoms = [feature for feature in aoi_ref_gpd['geometry']]
-            raster_recrop_arr, _ = rasters.mask(raster_recrop_path, geoms)  # A update après upgrade de Rémi de rasters
+            raster_recrop_arr, raster_recrop_meta = rasters.mask(raster_recrop_path, geoms)
+
             # Write masked raster
-            raster_masked_path = os.path.join(tmp_dir, "{}_resample_masked.tif".format(key))
+            raster_masked_path = os.path.join(tmp_dir, "{}_ref_masked.tif".format(key))
             rasters.write(raster_recrop_arr, raster_masked_path, raster_recrop_meta, nodata=0)
 
             # Store path result in a dict
@@ -716,26 +720,23 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
 
         else:
 
-            # Open the raster
-            with rasterio.open(raster_recrop_path) as raster_recrop_dst:
-                raster_recrop_band, raster_recrop_meta = rasters.read(raster_recrop_dst)
-
             # Collocate raster
-            raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_recrop_band,
-                                                                            raster_recrop_meta, raster_path_dict[key][1])
-
+            LOGGER.info('Collocate')
+            raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_crop_arr, raster_crop_meta,
+                                                                            raster_path_dict[key][1])
             # Write collocated raster
             raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
             rasters.write(raster_collocate_arr, raster_collocate_path, raster_collocate_meta, nodata=0)
 
             # Mask raster with AOI
+            LOGGER.info('Masking with AOI')
             aoi_ref_gpd = gpd.read_file(aoi_ref_path)
             geoms = [feature for feature in aoi_ref_gpd['geometry']]
-            raster_recrop_arr, _ = rasters.mask(raster_collocate_path,
-                                                geoms)  # A update après upgrade de Rémi de rasters
+            raster_recrop_arr, raster_recrop_meta = rasters.mask(raster_collocate_path,
+                                                                 geoms)
             # Write masked raster
-            raster_masked_path = os.path.join(tmp_dir, "{}_resample_masked.tif".format(key))
-            rasters.write(raster_recrop_arr, raster_masked_path, raster_collocate_meta, nodata=0)
+            raster_masked_path = os.path.join(tmp_dir, "{}_collocated_masked.tif".format(key))
+            rasters.write(raster_recrop_arr, raster_masked_path, raster_recrop_meta, nodata=0)
 
             # Store path result in a dict
             out_dict[key] = raster_masked_path
@@ -757,6 +758,7 @@ def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_ar
     Returns:
         np.ndarray : ndarray of the average annual soil loss (ton/ha/year)
     """
+    LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
     return r_arr * k_arr * ls_arr * c_arr * p_arr
 
@@ -766,23 +768,20 @@ if __name__ == '__main__':
     logs.init_logger(LOGGER, logging.DEBUG)
 
     ##### Load inputs
-    nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B08_10m.jp2"
-    red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200929T113321_N0214_R080_T29TNF_20200929T143142.SAFE\GRANULE\L2A_T29TNF_A027533_20200929T113454\IMG_DATA\R10m\T29TNF_20200929T113321_B04_10m.jp2"
-
-    aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\aoi - Copie.shp"
-    del_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
-
-    tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
-
+    nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2"
+    red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2"
+    aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp"
+    del_path ="" #r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
+    tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp_emsn073"
     output_resolution = 5
-
     ref_crs = get_crs(red_path)
 
     location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
 
+    # Check if the AOI is located inside or outside Europe
     if location == "Europe":
 
-        landcover_name = 'clc'  # Laisser la possibilité de changer
+        landcover_name = 'clc'
 
         r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
         k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
@@ -791,12 +790,12 @@ if __name__ == '__main__':
         p_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
         # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"red": [red_path, Resampling.bilinear ],
+        raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
                        "r": [r_path, Resampling.bilinear],
                        "k": [k_path, Resampling.bilinear],
-                       "ls": [ls_path,Resampling.bilinear],
-                       "lulc": [lulc_path,Resampling.nearest],
+                       "ls": [ls_path, Resampling.bilinear],
+                       "lulc": [lulc_path, Resampling.nearest],
                        "p": [p_path, Resampling.bilinear]
                        }
 
@@ -821,7 +820,7 @@ if __name__ == '__main__':
             p_arr, _ = rasters.read(p_dst)
 
     else:
-        landcover_name = 'clc'
+        landcover_name = 'clc'  # Can be change by the user in the Toolbox
 
         r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
         dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_wgs84.tif"
@@ -829,22 +828,22 @@ if __name__ == '__main__':
 
         # Produce k
         k_arr, k_meta = produce_k_outside_europe(aoi_path)
+
         # Write k raster
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
         # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"red": [red_path, Resampling.bilinear ],
+        raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
                        "r": [r_path, Resampling.bilinear],
-                       "k": [k_path, Resampling.bilinear],
+                       "k": [k_path, Resampling.nearest],
                        "lulc": [lulc_path, Resampling.nearest]
                        }
 
         # Run pre process
         post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
                                                   tmp_dir)
-
 
         # Open the r raster
         with rasterio.open(post_process_dict["r"]) as r_dst:
@@ -856,22 +855,26 @@ if __name__ == '__main__':
 
         # Crop DEM ### ---- Modifier les étapes ou faire une fonction ?
         dem_crop_path, dem_arr, dem_meta = crop_raster(aoi_path, dem_path, tmp_dir)
+
         # Reproj DEM
         dem_reproj_path = reproject_raster(dem_crop_path, ref_crs)
+
         # Produce ls
         ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
         ls_raw_arr, ls_raw_meta = produce_ls_factor(dem_reproj_path, ls_raw_path, tmp_dir)
+
         # Collocate ls with the other results
         ls_arr, ls_meta = rasters.collocate(r_meta, ls_raw_arr, ls_raw_meta, Resampling.bilinear)
+
         # Write ls
         ls_path = os.path.join(tmp_dir, "ls.tif")
         rasters.write(ls_arr, ls_path, ls_meta, nodata=0)
-
 
         # Produce p #--------------- A modifier
         p_value = 1  # Can change
         p_arr = ls_arr.copy()
         p_arr.fill(p_value)
+
         # Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_arr, p_path, ls_meta, nodata=0)
@@ -892,10 +895,22 @@ if __name__ == '__main__':
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
+        LOGGER.info("-- Update raster values covered by DEL --")
+
         lulc_process_path = post_process_dict["lulc"]
-        lulc_masked_path = os.path.join(tmp_dir, "lulc_masked.tif")
-        lulc_arr, lulc_meta = update_raster(lulc_process_path, reproj_del, lulc_masked_path,
-                                            334)
+        lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
+        _, _ = update_raster(lulc_process_path, reproj_del, lulc_masked_path,
+                             334)
+        # Mask raster with AOI
+        aoi_ref_path = reproj_shp(aoi_path, ref_crs)
+        aoi_ref_gpd = gpd.read_file(aoi_ref_path)
+        geoms = [feature for feature in aoi_ref_gpd['geometry']]
+        lulc_arr, lulc_meta = rasters.mask(lulc_masked_path, geoms)
+
+        # Write masked raster
+        raster_masked_path = os.path.join(tmp_dir, "lulc_with_fire_masked.tif")
+        rasters.write(lulc_arr, raster_masked_path, lulc_meta, nodata=0)
+
     else:
         # Open the lulc raster
         with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
@@ -903,6 +918,7 @@ if __name__ == '__main__':
 
     # Process C
     c_arr, c_meta = produce_c(lulc_arr, lulc_meta, fcover_arr, aoi_path, landcover_name)
+
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     rasters.write(c_arr, c_out, c_meta, nodata=0)
@@ -910,6 +926,7 @@ if __name__ == '__main__':
     # Produce a with RUSLE model
     a_meta = meta_fcover.copy()
     a_arr = produce_a_arr(r_arr, k_arr, ls_arr, c_arr, p_arr)
+
     # Write the a raster
     a_path = os.path.join(tmp_dir, "a_rusle.tif")
     rasters.write(a_arr, a_path, a_meta, nodata=0)
