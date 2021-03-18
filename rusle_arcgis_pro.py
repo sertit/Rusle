@@ -502,10 +502,10 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     grid = Grid.from_raster(dem_path, data_name='dem')
 
     # Fill dem
-    grid.fill_depressions(data='dem', out_name='filled_dem')
+    #grid.fill_depressions(data='dem', out_name='filled_dem')
 
     # Resolve flat
-    grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
+    grid.resolve_flats(data='dem', out_name='inflated_dem')
 
     grid.flowdir('inflated_dem', out_name='dir')
 
@@ -774,7 +774,7 @@ if __name__ == '__main__':
 
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
 
-    output_resolution = 40
+    output_resolution = 5
 
     ref_crs = get_crs(red_path)
 
@@ -854,13 +854,18 @@ if __name__ == '__main__':
         with rasterio.open(post_process_dict["k"]) as k_dst:
             k_arr, _ = rasters.read(k_dst)
 
-        # Crop DEM
+        # Crop DEM ### ---- Modifier les étapes ou faire une fonction ?
         dem_crop_path, dem_arr, dem_meta = crop_raster(aoi_path, dem_path, tmp_dir)
-        # Produce ls # --------------- A modifier
+        # Reproj DEM
+        dem_reproj_path = reproject_raster(dem_crop_path, ref_crs)
+        # Produce ls
         ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
-        ls_arr, ls_meta = produce_ls_factor(dem_crop_path, ls_raw_path, tmp_dir)
-
-
+        ls_raw_arr, ls_raw_meta = produce_ls_factor(dem_reproj_path, ls_raw_path, tmp_dir)
+        # Collocate ls with the other results
+        ls_arr, ls_meta = rasters.collocate(r_meta, ls_raw_arr, ls_raw_meta, Resampling.bilinear)
+        # Write ls
+        ls_path = os.path.join(tmp_dir, "ls.tif")
+        rasters.write(ls_arr, ls_path, ls_meta, nodata=0)
 
 
         # Produce p #--------------- A modifier
