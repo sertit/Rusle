@@ -762,6 +762,27 @@ def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_ar
 
     return r_arr * k_arr * ls_arr * c_arr * p_arr
 
+def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
+    """
+    Produce reclassed a
+    Args:
+        a_arr (np.ndarray) : a array
+
+    Returns:
+        np.ndarray : ndarray of the reclassed a raster
+    """
+
+    LOGGER.info("-- Produce the reclassed a --")
+
+    # List conditions and choices
+    conditions = [a_arr < 6.7, (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4), (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2) ]
+    choices = [1, 2, 3, 4, 5]
+
+    # Update arr with k values
+    a_reclass_arr = np.select(conditions, choices, default=np.nan)
+
+    return a_reclass_arr
+
 
 if __name__ == '__main__':
     # Logging
@@ -776,7 +797,7 @@ if __name__ == '__main__':
     output_resolution = 5
     ref_crs = get_crs(red_path)
 
-    location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
+    location = "Europe"  # Faire une fonction pour detecter si en europe ou non
 
     # Check if the AOI is located inside or outside Europe
     if location == "Europe":
@@ -930,3 +951,12 @@ if __name__ == '__main__':
     # Write the a raster
     a_path = os.path.join(tmp_dir, "a_rusle.tif")
     rasters.write(a_arr, a_path, a_meta, nodata=0)
+
+    # Reclass a
+    a_reclas_arr = produce_a_reclass_arr(a_arr)
+    a_reclass_meta = a_meta.copy()
+
+    # Write the a raster
+    a_reclass_path = os.path.join(tmp_dir, "a_rusle_reclass.tif")
+    rasters.write(a_reclas_arr, a_reclass_path, a_reclass_meta, nodata=0)
+
