@@ -652,6 +652,7 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
     return k_arr, k_meta
 
 
+
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
     """
@@ -673,16 +674,12 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
 
     # Loop on path into the dict
     for i, key in enumerate(raster_path_dict):
-        # Extract raster crs
-        raster_path = raster_path_dict[key]
-        with rasterio.open(raster_path, "r") as raster_dst:
-            raster_crs = raster_dst.crs
 
-        # Reproject aoi
-        aoi_reproj_path = reproj_shp(aoi_path, raster_crs)
+        # Store raster path
+        raster_path = raster_path_dict[key][0]
 
         # Crop raster
-        raster_crop_path, _, _ = crop_raster(aoi_reproj_path, raster_path, tmp_dir)
+        raster_crop_path, _, _ = crop_raster(aoi_path, raster_path, tmp_dir)
 
         # Reproject LULC
         raster_reproj_path = reproject_raster(raster_crop_path, dst_crs)
@@ -690,7 +687,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         # Resample reproj raster
         with rasterio.open(raster_reproj_path) as raster_reproj_dst:
             raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
-                                                                      Resampling.bilinear)
+                                                                      raster_path_dict[key][1])
 
         # Write resample raster
         raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
@@ -725,7 +722,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
 
             # Collocate raster
             raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_recrop_band,
-                                                                            raster_recrop_meta, Resampling.nearest)
+                                                                            raster_recrop_meta, raster_path_dict[key][1])
 
             # Write collocated raster
             raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
@@ -777,7 +774,7 @@ if __name__ == '__main__':
 
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp"
 
-    output_resolution = 5
+    output_resolution = 40
 
     ref_crs = get_crs(red_path)
 
@@ -793,14 +790,14 @@ if __name__ == '__main__':
         lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
         p_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
-        # Dict that store raster to pre_process
-        raster_dict = {"red": red_path,
-                       "nir": nir_path,
-                       "r": r_path,
-                       "k": k_path,
-                       "ls": ls_path,
-                       "lulc": lulc_path,
-                       "p": p_path
+        # Dict that store raster to pre_process and the type of resampling
+        raster_dict = {"red": [red_path, Resampling.bilinear ],
+                       "nir": [nir_path, Resampling.bilinear],
+                       "r": [r_path, Resampling.bilinear],
+                       "k": [k_path, Resampling.bilinear],
+                       "ls": [ls_path,Resampling.bilinear],
+                       "lulc": [lulc_path,Resampling.nearest],
+                       "p": [p_path, Resampling.bilinear]
                        }
 
         # Run pre process
@@ -836,40 +833,43 @@ if __name__ == '__main__':
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
-        # Dict that store raster to pre_process
-        raster_dict = {"red": red_path,
-                       "nir": nir_path,
-                       "r": r_path,
-                       "k": k_path,
-                       "dem": dem_path,
-                       "lulc": lulc_path
+        # Dict that store raster to pre_process and the type of resampling
+        raster_dict = {"red": [red_path, Resampling.bilinear ],
+                       "nir": [nir_path, Resampling.bilinear],
+                       "r": [r_path, Resampling.bilinear],
+                       "k": [k_path, Resampling.bilinear],
+                       "lulc": [lulc_path, Resampling.nearest]
                        }
 
         # Run pre process
         post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
                                                   tmp_dir)
 
-        # Produce ls
-        dem_process_path = post_process_dict["dem"]
-        ls_path = os.path.join(tmp_dir, "ls.tif")
-        LOGGER.info("Reproject shp vector to CRS %s", str(post_process_dict["dem"]))
-        ls_arr, ls_meta = produce_ls_factor(dem_process_path, ls_path, tmp_dir)
 
-        # Produce p
+        # Open the r raster
+        with rasterio.open(post_process_dict["r"]) as r_dst:
+            r_arr, r_meta = rasters.read(r_dst)
+
+        # Open the k raster
+        with rasterio.open(post_process_dict["k"]) as k_dst:
+            k_arr, _ = rasters.read(k_dst)
+
+        # Crop DEM
+        dem_crop_path, dem_arr, dem_meta = crop_raster(aoi_path, dem_path, tmp_dir)
+        # Produce ls # --------------- A modifier
+        ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
+        ls_arr, ls_meta = produce_ls_factor(dem_crop_path, ls_raw_path, tmp_dir)
+
+
+
+
+        # Produce p #--------------- A modifier
         p_value = 1  # Can change
         p_arr = ls_arr.copy()
         p_arr.fill(p_value)
         # Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_arr, p_path, ls_meta, nodata=0)
-
-        # Open the r raster
-        with rasterio.open(post_process_dict["r"]) as r_dst:
-            r_arr, _ = rasters.read(r_dst)
-
-        # Open the k raster
-        with rasterio.open(post_process_dict["k"]) as k_dst:
-            k_arr, _ = rasters.read(k_dst)
 
     # Process fcover
     red_process_path = post_process_dict["red"]
