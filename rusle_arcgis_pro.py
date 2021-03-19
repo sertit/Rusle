@@ -29,6 +29,8 @@ from pysheds.grid import Grid
 
 import pyodbc
 
+import pyproj
+
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
@@ -302,7 +304,7 @@ def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: 
         aoi = aoi.to_crs(crs_4326)
 
     # Extract europe countries
-    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox= aoi.envelope)
+    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # Initialize arable arr
@@ -502,20 +504,27 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     grid = Grid.from_raster(dem_path, data_name='dem')
 
     # Fill dem
-    #grid.fill_depressions(data='dem', out_name='filled_dem')
+    grid.fill_depressions(data='dem', out_name='filled_dem')
 
     # Resolve flat
-    #grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
+    grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
 
     # Produce dir
-    grid.flowdir('dem', out_name='dir')
+    grid.flowdir('inflated_dem', out_name='dir')
 
     # Export flow directions
     dir_path = os.path.join(tmp_dir, 'dir.tif')
     grid.to_raster('dir', dir_path)
 
-    # Compute accumulation
-    grid.accumulation(data='dir', out_name='acc')
+    # Compute areas of each cell in new projection #  A voir si conserve
+    new_crs = pyproj.Proj('+init=epsg:32631')
+    areas = grid.cell_area(as_crs=new_crs, inplace=False)
+
+    # Weight each cell by its relative area #  A voir si conserve
+    weights = (areas / areas.max()).ravel()
+
+    # Compute accumulation #  A voir si conserve
+    grid.accumulation(data='dir', weights=weights, out_name='acc')
 
     # Export  accumulation
     acc_path = os.path.join(tmp_dir, 'acc.tif')
@@ -548,13 +557,14 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         slope_p, _ = rasters.read(slope_dst)
 
     # m calculation
-    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5), slope_p >= 5]
+    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5), slope_p >= 5] # A compléter d'après le papier
     choices = [0.2, 0.3, 0.4, 0.5]
     m = np.select(conditions, choices, default=np.nan)
 
-    # Produce ls
-    ls_arr = np.power(acc_band.astype(np.float32) * cellsizex / 22.13, m) * np.power(
-        np.sin(slope_d.astype(np.float32) * 0.0174533) / 0.0896, 1.3)  # 1.3 fixed ?
+    # Produce ls # Vérifier l'occasion
+    # Equation 1 : file:///C:/Users/TLEDAU~1/AppData/Local/Temp/Ghosal-DasBhattacharya2020_Article_AReviewOfRUSLEModel.pdf
+    ls_arr = (0.065 + 0.0456 * slope_p + 0.006541 * np.power(slope_p, 2)) * np.power(
+        acc_band.astype(np.float32) * cellsizex / 22.13, m)
 
     # Write ls
     rasters.write(ls_arr, ls_path, meta, nodata=0)
@@ -766,6 +776,7 @@ def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_ar
 
     return r_arr * k_arr * ls_arr * c_arr * p_arr
 
+
 def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
     """
     Produce reclassed a
@@ -779,7 +790,8 @@ def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
     LOGGER.info("-- Produce the reclassed a --")
 
     # List conditions and choices
-    conditions = [a_arr < 6.7, (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4), (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2) ]
+    conditions = [a_arr < 6.7, (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
+                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
     # Update arr with k values
@@ -796,7 +808,7 @@ if __name__ == '__main__':
     nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2"
     red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2"
     aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp"
-    del_path ="" #r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
+    del_path = ""  # r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp_emsn073"
     output_resolution = 10
     ref_crs = get_crs(red_path)
@@ -848,7 +860,7 @@ if __name__ == '__main__':
         landcover_name = 'clc'  # Can be change by the user in the Toolbox
 
         r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
-        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_wgs84.tif"
+        dem_path = r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN073_StormImpact_Pyrenees_FLEX\02_Request_Implementation\04_Ancillary-Data\DTM_pre-event\EMSN073_AOI1DONNEES_DTM.tif"
         lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
 
         # Produce k
@@ -858,15 +870,15 @@ if __name__ == '__main__':
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
-        #k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
+        # k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
                        "r": [r_path, Resampling.bilinear],
                        "k": [k_path, Resampling.nearest],
-                       "lulc": [lulc_path, Resampling.nearest]#,
-                       #"dem": [dem_path, Resampling.bilinear]
+                       "lulc": [lulc_path, Resampling.nearest]  # ,
+                       # "dem": [dem_path, Resampling.bilinear]
                        }
 
         # Run pre process
@@ -886,8 +898,8 @@ if __name__ == '__main__':
         # Reproj DEM
         dem_reproj_path = reproject_raster(dem_crop_path, ref_crs, Resampling.bilinear)
         # Produce ls
-        ls_raw_path = os.path.join(tmp_dir, "ls.tif")
-        #dem_reproj_path = post_process_dict["dem"] # Si pre process du DEM
+        ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
+        # dem_reproj_path = post_process_dict["dem"] # Si pre process du DEM
         ls_raw_arr, ls_raw_meta = produce_ls_factor(dem_reproj_path, ls_raw_path, tmp_dir)
         # Collocate ls with the other results
         ls_arr, ls_meta = rasters.collocate(r_meta, ls_raw_arr, ls_raw_meta, Resampling.bilinear)
@@ -963,4 +975,3 @@ if __name__ == '__main__':
     # Write the a raster
     a_reclass_path = os.path.join(tmp_dir, "a_rusle_reclass.tif")
     rasters.write(a_reclas_arr, a_reclass_path, a_reclass_meta, nodata=0)
-
