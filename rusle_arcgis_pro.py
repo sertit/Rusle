@@ -92,7 +92,7 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
         return shp_path
 
 
-def reproject_raster(src_file: str, dst_crs: str) -> str:
+def reproject_raster(src_file: str, dst_crs: str, resampling_method) -> str:
     """
     Reproject raster to dst crs
     Args:
@@ -131,7 +131,7 @@ def reproject_raster(src_file: str, dst_crs: str) -> str:
                         src_crs=src.crs,
                         dst_transform=transform,
                         dst_crs=dst_crs,
-                        resampling=Resampling.nearest)
+                        resampling=resampling_method)
 
         return dst_file
 
@@ -502,11 +502,12 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     grid = Grid.from_raster(dem_path, data_name='dem')
 
     # Fill dem
-    grid.fill_depressions(data='dem', out_name='filled_dem')
+    #grid.fill_depressions(data='dem', out_name='filled_dem')
 
     # Resolve flat
-    grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
+    #grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
 
+    # Produce dir
     grid.flowdir('dem', out_name='dir')
 
     # Export flow directions
@@ -684,16 +685,19 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         # Crop raster
         raster_crop_path, raster_crop_arr, raster_crop_meta = crop_raster(aoi_path, raster_path, tmp_dir)
 
+        # Store resampling method
+        resampling_method = raster_path_dict[key][1]
+
         # Add path to the dictionary
         if i == 0:
 
             # Reproject raster
-            raster_reproj_path = reproject_raster(raster_crop_path, dst_crs)
+            raster_reproj_path = reproject_raster(raster_crop_path, dst_crs, resampling_method)
 
             # Resample reproj raster
             with rasterio.open(raster_reproj_path) as raster_reproj_dst:
                 raster_resample_band, raster_resample_meta = rasters.read(raster_reproj_dst, dst_resolution,
-                                                                          raster_path_dict[key][1])
+                                                                          resampling_method)
             # Write resample raster
             raster_resample_path = os.path.join(tmp_dir, "{}_resample.tif".format(key))
             rasters.write(raster_resample_band, raster_resample_path, raster_resample_meta, nodata=0)
@@ -723,7 +727,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             # Collocate raster
             LOGGER.info('Collocate')
             raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_crop_arr, raster_crop_meta,
-                                                                            raster_path_dict[key][1])
+                                                                            resampling_method)
             # Write collocated raster
             raster_collocate_path = os.path.join(tmp_dir, "{}_collocated.tif".format(key))
             rasters.write(raster_collocate_arr, raster_collocate_path, raster_collocate_meta, nodata=0)
@@ -794,10 +798,10 @@ if __name__ == '__main__':
     aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp"
     del_path ="" #r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp_emsn073"
-    output_resolution = 5
+    output_resolution = 10
     ref_crs = get_crs(red_path)
 
-    location = "Europe"  # Faire une fonction pour detecter si en europe ou non
+    location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
 
     # Check if the AOI is located inside or outside Europe
     if location == "Europe":
@@ -854,12 +858,15 @@ if __name__ == '__main__':
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
+        #k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
+
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
                        "r": [r_path, Resampling.bilinear],
                        "k": [k_path, Resampling.nearest],
-                       "lulc": [lulc_path, Resampling.nearest]
+                       "lulc": [lulc_path, Resampling.nearest]#,
+                       #"dem": [dem_path, Resampling.bilinear]
                        }
 
         # Run pre process
@@ -874,19 +881,16 @@ if __name__ == '__main__':
         with rasterio.open(post_process_dict["k"]) as k_dst:
             k_arr, _ = rasters.read(k_dst)
 
-        # Crop DEM ### ---- Modifier les étapes ou faire une fonction ?
+        # Crop DEM ### ---- Faire une fonction ?
         dem_crop_path, dem_arr, dem_meta = crop_raster(aoi_path, dem_path, tmp_dir)
-
         # Reproj DEM
-        dem_reproj_path = reproject_raster(dem_crop_path, ref_crs)
-
+        dem_reproj_path = reproject_raster(dem_crop_path, ref_crs, Resampling.bilinear)
         # Produce ls
-        ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
+        ls_raw_path = os.path.join(tmp_dir, "ls.tif")
+        #dem_reproj_path = post_process_dict["dem"] # Si pre process du DEM
         ls_raw_arr, ls_raw_meta = produce_ls_factor(dem_reproj_path, ls_raw_path, tmp_dir)
-
         # Collocate ls with the other results
         ls_arr, ls_meta = rasters.collocate(r_meta, ls_raw_arr, ls_raw_meta, Resampling.bilinear)
-
         # Write ls
         ls_path = os.path.join(tmp_dir, "ls.tif")
         rasters.write(ls_arr, ls_path, ls_meta, nodata=0)
