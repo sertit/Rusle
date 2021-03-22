@@ -491,14 +491,14 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
 
     # Make slope degree commande
-    cmd_slope_d = ["gdaldem",
-                   "slope",
-                   "-compute_edges",
-                   strings.to_cmd_string(dem_path),
-                   strings.to_cmd_string(slope_dem_d)]
+    # cmd_slope_d = ["gdaldem",
+    #                "slope",
+    #                "-compute_edges",
+    #                strings.to_cmd_string(dem_path),
+    #                strings.to_cmd_string(slope_dem_d)]
 
     # Run command
-    misc.run_cli(cmd_slope_d)
+    # misc.run_cli(cmd_slope_d)
 
     # Compute D8 flow directions
     grid = Grid.from_raster(dem_path, data_name='dem')
@@ -516,14 +516,19 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     dir_path = os.path.join(tmp_dir, 'dir.tif')
     grid.to_raster('dir', dir_path)
 
-    # Compute areas of each cell in new projection #  A voir si conserve
-    new_crs = pyproj.Proj('+init=epsg:32631')
+    # Extract epsg code of the dem #  A voir si conserve le weight et améliorer cette partie du script
+    with rasterio.open(dem_path, "r") as dem_dst:
+        dem_epsg = str(dem_dst.crs)[-5:]
+
+    # Compute areas of each cell in new projection #  A voir si conserve le weight et améliorer cette partie du script
+    new_crs = pyproj.Proj('+init=epsg:{}'.format(dem_epsg))
     areas = grid.cell_area(as_crs=new_crs, inplace=False)
 
-    # Weight each cell by its relative area #  A voir si conserve
+    # Weight each cell by its relative area
     weights = (areas / areas.max()).ravel()
 
-    # Compute accumulation #  A voir si conserve
+    # Compute accumulation
+    # grid.accumulation(data='dir', out_name='acc')
     grid.accumulation(data='dir', weights=weights, out_name='acc')
 
     # Export  accumulation
@@ -557,8 +562,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         slope_p, _ = rasters.read(slope_dst)
 
     # m calculation
-    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5), slope_p >= 5] # A compléter d'après le papier
-    choices = [0.2, 0.3, 0.4, 0.5]
+    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5),(slope_p >= 5) & (slope_p > 12), slope_p >= 12]
+    choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
 
     # Produce ls # Vérifier l'occasion
@@ -810,7 +815,7 @@ if __name__ == '__main__':
     aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp"
     del_path = ""  # r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
     tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp_emsn073"
-    output_resolution = 10
+    output_resolution = 25
     ref_crs = get_crs(red_path)
 
     location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
@@ -860,7 +865,7 @@ if __name__ == '__main__':
         landcover_name = 'clc'  # Can be change by the user in the Toolbox
 
         r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
-        dem_path = r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN073_StormImpact_Pyrenees_FLEX\02_Request_Implementation\04_Ancillary-Data\DTM_pre-event\EMSN073_AOI1DONNEES_DTM.tif"
+        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\SRTM_30m_v4\index.vrt"
         lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
 
         # Produce k
@@ -870,15 +875,14 @@ if __name__ == '__main__':
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
-        # k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
+        k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
                        "r": [r_path, Resampling.bilinear],
                        "k": [k_path, Resampling.nearest],
-                       "lulc": [lulc_path, Resampling.nearest]  # ,
-                       # "dem": [dem_path, Resampling.bilinear]
+                       "lulc": [lulc_path, Resampling.nearest]
                        }
 
         # Run pre process
@@ -899,7 +903,6 @@ if __name__ == '__main__':
         dem_reproj_path = reproject_raster(dem_crop_path, ref_crs, Resampling.bilinear)
         # Produce ls
         ls_raw_path = os.path.join(tmp_dir, "ls_raw.tif")
-        # dem_reproj_path = post_process_dict["dem"] # Si pre process du DEM
         ls_raw_arr, ls_raw_meta = produce_ls_factor(dem_reproj_path, ls_raw_path, tmp_dir)
         # Collocate ls with the other results
         ls_arr, ls_meta = rasters.collocate(r_meta, ls_raw_arr, ls_raw_meta, Resampling.bilinear)
