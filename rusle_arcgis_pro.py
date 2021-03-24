@@ -41,6 +41,13 @@ EUROPE_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countri
 HWSD_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\hwsd.tif"
 DBFILE_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"
 
+R_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
+K_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
+LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\LS_100m\EU_LS_Mosaic_100m.tif"
+LULC_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
+P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
+
+R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
 
 def get_crs(raster_path: str) -> CRS:
     """
@@ -487,8 +494,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
 
     LOGGER.info("-- Produce the LS factor --")
 
-    # Get slope path
-    slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
+    # # Get slope path
+    # slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
 
     # Make slope degree commande
     # cmd_slope_d = ["gdaldem",
@@ -543,8 +550,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         acc_band, meta = rasters.read(acc_dst)
 
     # Open slope d
-    with rasterio.open(slope_dem_d) as slope_dst:
-        slope_d, _ = rasters.read(slope_dst)
+    # with rasterio.open(slope_dem_d) as slope_dst:
+    #     slope_d, _ = rasters.read(slope_dst)
 
     # Make slope percentage command
     slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
@@ -566,7 +573,7 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
 
-    # Produce ls # Vérifier l'occasion
+    # Produce ls
     # Equation 1 : file:///C:/Users/TLEDAU~1/AppData/Local/Temp/Ghosal-DasBhattacharya2020_Article_AReviewOfRUSLEModel.pdf
     ls_arr = (0.065 + 0.0456 * slope_p + 0.006541 * np.power(slope_p, 2)) * np.power(
         acc_band.astype(np.float32) * cellsizex / 22.13, m)
@@ -825,20 +832,14 @@ if __name__ == '__main__':
 
         landcover_name = 'clc'
 
-        r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
-        k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
-        ls_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\LS_100m\EU_LS_Mosaic_100m.tif"
-        lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-        p_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
-
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
-                       "r": [r_path, Resampling.bilinear],
-                       "k": [k_path, Resampling.bilinear],
-                       "ls": [ls_path, Resampling.bilinear],
-                       "lulc": [lulc_path, Resampling.nearest],
-                       "p": [p_path, Resampling.bilinear]
+                       "r": [R_EURO_PATH, Resampling.bilinear],
+                       "k": [K_EURO_PATH, Resampling.bilinear],
+                       "ls": [LS_EURO_PATH, Resampling.bilinear],
+                       "lulc": [LULC_EURO_PATH, Resampling.nearest],
+                       "p": [P_EURO_PATH, Resampling.bilinear]
                        }
 
         # Run pre process
@@ -864,8 +865,8 @@ if __name__ == '__main__':
     else:
         landcover_name = 'clc'  # Can be change by the user in the Toolbox
 
-        r_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
-        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\SRTM_30m_v4\index.vrt"
+        R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
+        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
         lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
 
         # Produce k
@@ -880,7 +881,7 @@ if __name__ == '__main__':
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
                        "nir": [nir_path, Resampling.bilinear],
-                       "r": [r_path, Resampling.bilinear],
+                       "r": [R_GLOBAL_PATH, Resampling.bilinear],
                        "k": [k_path, Resampling.nearest],
                        "lulc": [lulc_path, Resampling.nearest]
                        }
