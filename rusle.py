@@ -31,8 +31,6 @@ import pyodbc
 
 import pyproj
 
-import arcpy
-
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
@@ -46,13 +44,10 @@ DBFILE_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_So
 R_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
 K_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
 LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\LS_100m\EU_LS_Mosaic_100m.tif"
+LULC_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
 P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
-CLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-# Add other landcover path
-
-R_GLOBAL_PATH = "" ## !!!! A télécharger
-
+R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
 
 def get_crs(raster_path: str) -> CRS:
     """
@@ -85,7 +80,7 @@ def reproj_shp(shp_path: str, raster_crs: CRS) -> str:
     # Reproj shape vector if needed
     vec = gpd.read_file(shp_path)
     if vec.crs != raster_crs:
-        arcpy.AddMessage("Reproject shp vector to CRS {}".format(raster_crs))
+        LOGGER.info("Reproject shp vector to CRS %s", str(raster_crs))
         # A modifier start
         if not "EPSG:" in str(raster_crs):
             epsg_code = "custom"
@@ -116,7 +111,7 @@ def reproject_raster(src_file: str, dst_crs: str, resampling_method) -> str:
     Returns:
         str: Reprojected raster path
     """
-    arcpy.AddMessage("Reprojecting")
+    LOGGER.debug("Reprojecting")
 
     # Extract crs of the dem
     with rasterio.open(src_file, "r") as src_dst:
@@ -165,7 +160,7 @@ def crop_raster(aoi_path: str, raster_path: str, tmp_dir: str) -> (str, np.ndarr
         np.ndarray : ndarray of the cropped raster
         dict : metadata of the cropped raster
     """
-    arcpy.AddMessage("Crop Raster to the AOI extent")
+    LOGGER.info("Crop Raster to the AOI extent")
 
     with rasterio.open(raster_path) as raster_dst:
         aoi = gpd.read_file(aoi_path)
@@ -194,7 +189,7 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
         np.ndarray : ndarray of the fcover raster
         dict : metadata of the fcover raster
     """
-    arcpy.AddMessage("-- Produce the fcover index --")
+    LOGGER.info("-- Produce the fcover index --")
 
     # Read and resample red
     with rasterio.open(red_path) as red_dst:
@@ -249,7 +244,7 @@ def update_raster(raster_path: str, shp_path: str, output_raster_path: str, valu
         dict : metadata of the updated raster
     """
 
-    # arcpy.AddMessage("-- Update raster values covered by the shape --")
+    # LOGGER.info("-- Update raster values covered by the shape --")
 
     # Check if same crs
     with rasterio.open(raster_path) as raster_dst:
@@ -283,7 +278,7 @@ def produce_c_arable_europe(aoi_path: str, raster_arr: np.ndarray, meta_raster: 
         dict : metadata of the c arable raster
     """
 
-    arcpy.AddMessage("-- Produce C arable index over Europe --")
+    LOGGER.info("-- Produce C arable index over Europe --")
 
     arable_c_dict = {
         "Finland": 0.231,
@@ -355,7 +350,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
         np.ndarray : ndarray of the c index raster
         dict : metadata of the c index raster
     """
-    arcpy.AddMessage("-- Produce C index --")
+    LOGGER.info("-- Produce C index --")
 
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
@@ -497,7 +492,7 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         dict : metadata of the ls factor raster
     """
 
-    arcpy.AddMessage("-- Produce the LS factor --")
+    LOGGER.info("-- Produce the LS factor --")
 
     # # Get slope path
     # slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
@@ -600,7 +595,7 @@ def produce_k_outside_europe(aoi_path: str) -> (np.ndarray, dict):
         dict : metadata of the K raster
     """
 
-    arcpy.AddMessage("-- Produce the K index outside Europe --")
+    LOGGER.info("-- Produce the K index outside Europe --")
 
     # Extract crs of the hwsd
     with rasterio.open(HWSD_PATH, "r") as hwsd_dst:
@@ -696,7 +691,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     Returns:
         dict : dictionary that store the list of pre process raster (key = alias : value : raster path)
     """
-    arcpy.AddMessage("-- RASTER PRE PROCESSING --")
+    LOGGER.info("-- RASTER PRE PROCESSING --")
     out_dict = {}
 
     # Reproject aoi
@@ -705,7 +700,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     # Loop on path into the dict
     for i, key in enumerate(raster_path_dict):
 
-        arcpy.AddMessage('********* {} ********'.format(key))
+        LOGGER.info('********* {} ********'.format(key))
         # Store raster path
         raster_path = raster_path_dict[key][0]
 
@@ -733,7 +728,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             raster_recrop_path, _, _ = crop_raster(aoi_ref_path, raster_resample_path, tmp_dir)
 
             # Mask raster with AOI
-            arcpy.AddMessage('Masking with AOI')
+            LOGGER.info('Masking with AOI')
             aoi_ref_gpd = gpd.read_file(aoi_ref_path)
             geoms = [feature for feature in aoi_ref_gpd['geometry']]
             raster_recrop_arr, raster_recrop_meta = rasters.mask(raster_recrop_path, geoms)
@@ -752,7 +747,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         else:
 
             # Collocate raster
-            arcpy.AddMessage('Collocate')
+            LOGGER.info('Collocate')
             raster_collocate_arr, raster_collocate_meta = rasters.collocate(meta_ref, raster_crop_arr, raster_crop_meta,
                                                                             resampling_method)
             # Write collocated raster
@@ -760,7 +755,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
             rasters.write(raster_collocate_arr, raster_collocate_path, raster_collocate_meta, nodata=0)
 
             # Mask raster with AOI
-            arcpy.AddMessage('Masking with AOI')
+            LOGGER.info('Masking with AOI')
             aoi_ref_gpd = gpd.read_file(aoi_ref_path)
             geoms = [feature for feature in aoi_ref_gpd['geometry']]
             raster_recrop_arr, raster_recrop_meta = rasters.mask(raster_collocate_path,
@@ -789,7 +784,7 @@ def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_ar
     Returns:
         np.ndarray : ndarray of the average annual soil loss (ton/ha/year)
     """
-    arcpy.AddMessage("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
+    LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
     return r_arr * k_arr * ls_arr * c_arr * p_arr
 
@@ -804,7 +799,7 @@ def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
         np.ndarray : ndarray of the reclassed a raster
     """
 
-    arcpy.AddMessage("-- Produce the reclassed a --")
+    LOGGER.info("-- Produce the reclassed a --")
 
     # List conditions and choices
     conditions = [a_arr < 6.7, (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
@@ -821,32 +816,21 @@ if __name__ == '__main__':
     # Logging
     logs.init_logger(LOGGER, logging.DEBUG)
 
-    ##### Parameters
-    aoi_path = str(arcpy.GetParameterAsText(0))
-    location = str(arcpy.GetParameterAsText(1))
-    nir_path = str(arcpy.GetParameterAsText(2))
-    red_path = str(arcpy.GetParameterAsText(2))
-    del_path = str(arcpy.GetParameterAsText(4))
-    landcover_name = str(arcpy.GetParameterAsText(5))
-    p03_path = str(arcpy.GetParameterAsText(6))
-    output_resolution = int(str(arcpy.GetParameterAsText(7)))
-    ref_crs = str(arcpy.GetParameterAsText(8)) # get_crs(red_path)
-    output_dir = str(arcpy.GetParameterAsText(9))
+    ##### Load inputs
+    nir_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2"
+    red_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2"
+    aoi_path = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp"
+    del_path = ""  # r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSR462_del.shp"
+    tmp_dir = r"D:\TLedauphin\02_Temp_traitement\Test_rusle\tmp_emsn073"
+    output_resolution = 25
+    ref_crs = get_crs(red_path)
 
-
-    # Create temp_dir if not exist
-    tmp_dir = os.path.join(output_dir, "temp_dir")
-    if not os.path.exists(tmp_dir) :
-        os.makedirs(tmp_dir)
-
-    #!!!!!!! Add the other landcover
-    landcover_path_dict = { "Corine Land Cover": CLC_PATH,
-                       "P03" : p03_path
-                            }
-
+    location = "Eurpe"  # Faire une fonction pour detecter si en europe ou non
 
     # Check if the AOI is located inside or outside Europe
     if location == "Europe":
+
+        landcover_name = 'clc'
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
@@ -854,7 +838,7 @@ if __name__ == '__main__':
                        "r": [R_EURO_PATH, Resampling.bilinear],
                        "k": [K_EURO_PATH, Resampling.bilinear],
                        "ls": [LS_EURO_PATH, Resampling.bilinear],
-                       "lulc": [landcover_path_dict[landcover_name], Resampling.nearest],
+                       "lulc": [LULC_EURO_PATH, Resampling.nearest],
                        "p": [P_EURO_PATH, Resampling.bilinear]
                        }
 
@@ -879,9 +863,11 @@ if __name__ == '__main__':
             p_arr, _ = rasters.read(p_dst)
 
     else:
+        landcover_name = 'clc'  # Can be change by the user in the Toolbox
 
+        R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
         dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
-        lulc_path = landcover_path_dict[landcover_name]
+        lulc_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
 
         # Produce k
         k_arr, k_meta = produce_k_outside_europe(aoi_path)
@@ -889,6 +875,8 @@ if __name__ == '__main__':
         # Write k raster
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_arr, k_path, k_meta, nodata=0)
+
+        k_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"red": [red_path, Resampling.bilinear],
@@ -948,7 +936,7 @@ if __name__ == '__main__':
         reproj_del = reproj_shp(del_path, ref_crs)
 
         # Update the lulc with the DEL
-        arcpy.AddMessage("-- Update raster values covered by DEL --")
+        LOGGER.info("-- Update raster values covered by DEL --")
 
         lulc_process_path = post_process_dict["lulc"]
         lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
@@ -956,7 +944,6 @@ if __name__ == '__main__':
                              334)
         # Mask raster with AOI
         aoi_ref_path = reproj_shp(aoi_path, ref_crs)
-        arcpy.AddMessage(aoi_ref_path)
         aoi_ref_gpd = gpd.read_file(aoi_ref_path)
         geoms = [feature for feature in aoi_ref_gpd['geometry']]
         lulc_arr, lulc_meta = rasters.mask(lulc_masked_path, geoms)
