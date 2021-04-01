@@ -49,9 +49,14 @@ LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database
 P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
 CLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-# Add other landcover path
+R_GLOBAL_PATH = ""  ## !!!! A télécharger
+GLC_PATH = ""  ## !!!! A ajouter
+GC_PATH = ""  ## !!!! A ajouter
+GL_PATH = ""  ## !!!! A ajouter
 
-R_GLOBAL_PATH = "" ## !!!! A télécharger
+EUDEM_PATH = ""  ## !!!! A ajouter
+SRTM30_PATH = ""  ## !!!! A ajouter
+MERIT_PATH = ""  ## !!!! A ajouter
 
 
 def get_crs(raster_path: str) -> CRS:
@@ -384,7 +389,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
         # Produce arable c
         arable_c_arr, _ = produce_c_arable_europe(aoi_path, lulc_arr, meta_lulc)
         c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
-
+    # Global Land Cover - Copernicus 2020 (100m)
     elif lulc_type == 'glc':
         cfactor_dict = {
             111: [0.0001, 0.003],
@@ -410,6 +415,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
         # Produce arable c
         c_arr_arable = np.where(np.isin(lulc_arr, [11, 14, 20]), 0.27, np.nan)
 
+    # GlobCover - ESA 2005 (300m)
     elif lulc_type == 'gc':
         cfactor_dict = {
             11: [0.07, 0.2],
@@ -436,6 +442,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
         # Produce arable c
         c_arr_arable = np.where(lulc_arr == 40, 0.27, np.nan)
 
+    # GlobeLand30 - China 2020 (30m)
     elif lulc_type == 'gl':
         cfactor_dict = {
             20: [0.00010000000, 0.00250000000],
@@ -574,7 +581,8 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
         slope_p, _ = rasters.read(slope_dst)
 
     # m calculation
-    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5),(slope_p >= 5) & (slope_p > 12), slope_p >= 12]
+    conditions = [slope_p < 1, (slope_p >= 1) & (slope_p > 3), (slope_p >= 3) & (slope_p > 5),
+                  (slope_p >= 5) & (slope_p > 12), slope_p >= 12]
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
 
@@ -824,39 +832,61 @@ if __name__ == '__main__':
     ##### Parameters
     aoi_path = str(arcpy.GetParameterAsText(0))
     location = str(arcpy.GetParameterAsText(1))
+
+    fcover_method = ""
+    fcover_path = ""
     nir_path = str(arcpy.GetParameterAsText(2))
     red_path = str(arcpy.GetParameterAsText(2))
-    del_path = str(arcpy.GetParameterAsText(4))
+
     landcover_name = str(arcpy.GetParameterAsText(5))
     p03_path = str(arcpy.GetParameterAsText(6))
-    output_resolution = int(str(arcpy.GetParameterAsText(7)))
-    ref_crs = str(arcpy.GetParameterAsText(8)) # get_crs(red_path)
-    output_dir = str(arcpy.GetParameterAsText(9))
+    del_path = str(arcpy.GetParameterAsText(4))
 
+    ls_method = ""
+    ls_path = ""
+    dem_name = ""
+    other_dem_path = ""
+
+    output_resolution = int(str(arcpy.GetParameterAsText(7)))
+    ref_crs = str(arcpy.GetParameterAsText(8))  # get_crs(red_path)
+    output_dir = str(arcpy.GetParameterAsText(9))
 
     # Create temp_dir if not exist
     tmp_dir = os.path.join(output_dir, "temp_dir")
-    if not os.path.exists(tmp_dir) :
+    if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-    #!!!!!!! Add the other landcover
-    landcover_path_dict = { "Corine Land Cover": CLC_PATH,
-                       "P03" : p03_path
-                            }
-
+    # Dict that store landcover name and landcover path
+    landcover_path_dict = {"Corine Land Cover - 2018 (100m)": [CLC_PATH, "clc"],
+                           "Global Land Cover - Copernicus 2020(100m)": [GLC_PATH, "glc"],
+                           "GlobCover - ESA 2005(300m)": [GC_PATH, "gc"],
+                           "GlobeLand30 - China 2020 (30m)": [GL_PATH, "gl"],
+                           "P03": [p03_path, "clc"]
+                           }
 
     # Check if the AOI is located inside or outside Europe
     if location == "Europe":
 
+        # Store landcover path
+        lulc_path = landcover_path_dict[landcover_name][0]
+
         # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"red": [red_path, Resampling.bilinear],
-                       "nir": [nir_path, Resampling.bilinear],
-                       "r": [R_EURO_PATH, Resampling.bilinear],
+        raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
                        "k": [K_EURO_PATH, Resampling.bilinear],
-                       "ls": [LS_EURO_PATH, Resampling.bilinear],
-                       "lulc": [landcover_path_dict[landcover_name], Resampling.nearest],
+                       "lulc": [lulc_path, Resampling.nearest],
                        "p": [P_EURO_PATH, Resampling.bilinear]
                        }
+
+        # Add the ls raster to the pre process dict if provided
+        if ls_method == "Already provided":
+            raster_dict["ls"] = [ls_path, Resampling.bilinear]
+
+        # Add bands to the pre process dict if fcover need to be calculated or not
+        if fcover_method == "To be calculated":
+            raster_dict["red"] = [red_path, Resampling.bilinear]
+            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+        elif fcover_method == "Already provided":
+            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
 
         # Run pre process
         post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
@@ -870,10 +900,6 @@ if __name__ == '__main__':
         with rasterio.open(post_process_dict["k"]) as k_dst:
             k_arr, _ = rasters.read(k_dst)
 
-        # Open the ls raster
-        with rasterio.open(post_process_dict["ls"]) as ls_dst:
-            ls_arr, _ = rasters.read(ls_dst)
-
         # Open the p raster
         with rasterio.open(post_process_dict["p"]) as p_dst:
             p_arr, _ = rasters.read(p_dst)
@@ -881,7 +907,7 @@ if __name__ == '__main__':
     else:
 
         dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
-        lulc_path = landcover_path_dict[landcover_name]
+        lulc_path = landcover_path_dict[landcover_name][0]
 
         # Produce k
         k_arr, k_meta = produce_k_outside_europe(aoi_path)
@@ -891,12 +917,21 @@ if __name__ == '__main__':
         rasters.write(k_arr, k_path, k_meta, nodata=0)
 
         # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"red": [red_path, Resampling.bilinear],
-                       "nir": [nir_path, Resampling.bilinear],
-                       "r": [R_GLOBAL_PATH, Resampling.bilinear],
+        raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
                        "k": [k_path, Resampling.nearest],
                        "lulc": [lulc_path, Resampling.nearest]
                        }
+
+        # Add the ls raster to the pre process dict if provided
+        if ls_method == "Already provided":
+            raster_dict["ls"] = [ls_path, Resampling.bilinear]
+
+        # Add bands to the pre process dict if fcover need to be calculated or not
+        if fcover_method == "To be calculated":
+            raster_dict["red"] = [red_path, Resampling.bilinear]
+            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+        elif fcover_method == "Already provided":
+            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
 
         # Run pre process
         post_process_dict = raster_pre_processing(aoi_path, output_resolution, ref_crs, raster_dict,
@@ -910,7 +945,30 @@ if __name__ == '__main__':
         with rasterio.open(post_process_dict["k"]) as k_dst:
             k_arr, _ = rasters.read(k_dst)
 
-        # Crop DEM ### ---- Faire une fonction ?
+        # Produce p #--------------- A modifier
+        p_value = 1  # Can change
+        p_arr = r_arr.copy()
+        p_arr.fill(p_value)
+
+        # Write p
+        p_meta = r_meta.copy()
+        p_path = os.path.join(tmp_dir, "p.tif")
+        rasters.write(p_arr, p_path, p_meta, nodata=0)
+
+
+    # Check if ls need to be calculated or not
+    if ls_method == "To be calculated":
+
+        # Dict that store dem_name with path
+        dem_dict = {"EUDEM 25m": EUDEM_PATH,
+                    "SRTM 30m": SRTM30_PATH,
+                    "MERIT 5 deg": MERIT_PATH,
+                    "Other": other_dem_path
+                    }
+
+        dem_path = dem_dict[dem_name]
+
+        # Crop DEM
         dem_crop_path, dem_arr, dem_meta = crop_raster(aoi_path, dem_path, tmp_dir)
         # Reproj DEM
         dem_reproj_path = reproject_raster(dem_crop_path, ref_crs, Resampling.bilinear)
@@ -923,25 +981,27 @@ if __name__ == '__main__':
         ls_path = os.path.join(tmp_dir, "ls.tif")
         rasters.write(ls_arr, ls_path, ls_meta, nodata=0)
 
-        # Produce p #--------------- A modifier
-        p_value = 1  # Can change
-        p_arr = ls_arr.copy()
-        p_arr.fill(p_value)
+    elif ls_method == "Already provided":
+        with rasterio.open(raster_dict["ls"]) as ls_dst:
+            ls_arr, ls_meta = rasters.read(ls_dst)
 
-        # Write p
-        p_path = os.path.join(tmp_dir, "p.tif")
-        rasters.write(p_arr, p_path, ls_meta, nodata=0)
 
-    # Process fcover
-    red_process_path = post_process_dict["red"]
-    nir_process_path = post_process_dict["nir"]
-    fcover_arr, meta_fcover = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir)
+    # Check if fcover need to be calculated or not
+    if fcover_method == "To be calculated":
+        # Process fcover
+        red_process_path = post_process_dict["red"]
+        nir_process_path = post_process_dict["nir"]
+        fcover_arr, meta_fcover = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir)
 
-    # Write fcover
-    fcover_path = os.path.join(tmp_dir, "fcover.tif")
-    rasters.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
+        # Write fcover
+        fcover_path = os.path.join(tmp_dir, "fcover.tif")
+        rasters.write(fcover_arr, fcover_path, meta_fcover, nodata=0)
 
-    # Process Cfactor
+    elif fcover_method == "Already provided":
+        with rasterio.open(post_process_dict["fcover"]) as fcover_dst:
+            fcover_arr, meta_fcover = rasters.read(fcover_dst)
+
+
     # Mask lulc if del
     if del_path:
         # Reproject del
@@ -971,7 +1031,8 @@ if __name__ == '__main__':
             lulc_arr, lulc_meta = rasters.read(lulc_dst)
 
     # Process C
-    c_arr, c_meta = produce_c(lulc_arr, lulc_meta, fcover_arr, aoi_path, landcover_name)
+    lulc_alias = landcover_path_dict[landcover_name][1]
+    c_arr, c_meta = produce_c(lulc_arr, lulc_meta, fcover_arr, aoi_path, lulc_alias)
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
