@@ -33,6 +33,10 @@ import pyproj
 
 import arcpy
 
+# Commande pour supprimer l'erreur suivante : "ValueError: GEOSGeom_createLinearRing_r returned a NULL pointer"
+import shapely
+shapely.speedups.disable()
+
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
@@ -49,14 +53,14 @@ LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database
 P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
 CLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-R_GLOBAL_PATH = ""  ## !!!! A télécharger
-GLC_PATH = ""  ## !!!! A ajouter
-GC_PATH = ""  ## !!!! A ajouter
-GL_PATH = ""  ## !!!! A ajouter
+R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"  ## !!!! A télécharger (pour le moment c'est l'euro)
+GLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Land_Cover\2019\PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
+GC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Globcover_2009\Globcover2009_V2.3_Global_\GLOBCOVER_L4_200901_200912_V2.3.tif"
+GL_PATH = "" # A ajouter
 
-EUDEM_PATH = ""  ## !!!! A ajouter
-SRTM30_PATH = ""  ## !!!! A ajouter
-MERIT_PATH = ""  ## !!!! A ajouter
+EUDEM_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_dem_3035_europe.tif"
+SRTM30_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\SRTM_30m_v4\index.vrt"
+MERIT_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
 
 
 def get_crs(raster_path: str) -> CRS:
@@ -833,23 +837,31 @@ if __name__ == '__main__':
     aoi_path = str(arcpy.GetParameterAsText(0))
     location = str(arcpy.GetParameterAsText(1))
 
-    fcover_method = ""
-    fcover_path = ""
-    nir_path = str(arcpy.GetParameterAsText(2))
-    red_path = str(arcpy.GetParameterAsText(2))
+    fcover_method = str(arcpy.GetParameterAsText(2))
+    fcover_path = str(arcpy.GetParameterAsText(3))
+    nir_path = str(arcpy.GetParameterAsText(4))
+    red_path = str(arcpy.GetParameterAsText(5))
 
-    landcover_name = str(arcpy.GetParameterAsText(5))
-    p03_path = str(arcpy.GetParameterAsText(6))
-    del_path = str(arcpy.GetParameterAsText(4))
+    landcover_name = str(arcpy.GetParameterAsText(6))
+    p03_path = str(arcpy.GetParameterAsText(7))
+    del_path = str(arcpy.GetParameterAsText(8))
 
-    ls_method = ""
-    ls_path = ""
-    dem_name = ""
-    other_dem_path = ""
+    ls_method = str(arcpy.GetParameterAsText(9))
+    ls_path = str(arcpy.GetParameterAsText(10))
+    dem_name = str(arcpy.GetParameterAsText(11))
+    other_dem_path = str(arcpy.GetParameterAsText(12))
 
-    output_resolution = int(str(arcpy.GetParameterAsText(7)))
-    ref_crs = str(arcpy.GetParameterAsText(8))  # get_crs(red_path)
-    output_dir = str(arcpy.GetParameterAsText(9))
+    output_resolution = int(str(arcpy.GetParameterAsText(13)))
+    ref_system = arcpy.GetParameterAsText(14)  # get_crs(red_path)
+    output_dir = str(arcpy.GetParameterAsText(15))
+
+    # Extract the epsg code from the reference system parameter (A voir si une manière plus direte)
+    sr = arcpy.SpatialReference()
+    sr.loadFromString(ref_system)
+    ref_epsg = sr.factoryCode
+    # Define the reference CRS
+    ref_crs = CRS.from_epsg(ref_epsg)
+
 
     # Create temp_dir if not exist
     tmp_dir = os.path.join(output_dir, "temp_dir")
@@ -894,7 +906,7 @@ if __name__ == '__main__':
 
         # Open the r raster
         with rasterio.open(post_process_dict["r"]) as r_dst:
-            r_arr, _ = rasters.read(r_dst)
+            r_arr, r_meta = rasters.read(r_dst)
 
         # Open the k raster
         with rasterio.open(post_process_dict["k"]) as k_dst:
@@ -1043,7 +1055,7 @@ if __name__ == '__main__':
     a_arr = produce_a_arr(r_arr, k_arr, ls_arr, c_arr, p_arr)
 
     # Write the a raster
-    a_path = os.path.join(tmp_dir, "a_rusle.tif")
+    a_path = os.path.join(output_dir, "a_rusle.tif")
     rasters.write(a_arr, a_path, a_meta, nodata=0)
 
     # Reclass a
@@ -1051,5 +1063,5 @@ if __name__ == '__main__':
     a_reclass_meta = a_meta.copy()
 
     # Write the a raster
-    a_reclass_path = os.path.join(tmp_dir, "a_rusle_reclass.tif")
+    a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
     rasters.write(a_reclas_arr, a_reclass_path, a_reclass_meta, nodata=0)
