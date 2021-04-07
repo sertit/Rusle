@@ -53,7 +53,8 @@ LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database
 P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
 
 CLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"  ## !!!! A télécharger (pour le moment c'est l'euro)
+R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Rainfall_Erosivity\GlobalR_NoPol.tif"
+
 GLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Land_Cover\2019\PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
 GC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Globcover_2009\Globcover2009_V2.3_Global_\GLOBCOVER_L4_200901_200912_V2.3.tif"
 GL_PATH = "" # A ajouter
@@ -855,7 +856,7 @@ if __name__ == '__main__':
     ref_system = arcpy.GetParameterAsText(14)  # get_crs(red_path)
     output_dir = str(arcpy.GetParameterAsText(15))
 
-    # Extract the epsg code from the reference system parameter (A voir si une manière plus direte)
+    # Extract the epsg code from the reference system parameter (A voir si une manière plus directe)
     sr = arcpy.SpatialReference()
     sr.loadFromString(ref_system)
     ref_epsg = sr.factoryCode
@@ -870,8 +871,8 @@ if __name__ == '__main__':
 
     # Dict that store landcover name and landcover path
     landcover_path_dict = {"Corine Land Cover - 2018 (100m)": [CLC_PATH, "clc"],
-                           "Global Land Cover - Copernicus 2020(100m)": [GLC_PATH, "glc"],
-                           "GlobCover - ESA 2005(300m)": [GC_PATH, "gc"],
+                           "Global Land Cover - Copernicus 2020 (100m)": [GLC_PATH, "glc"],
+                           "GlobCover - ESA 2005 (300m)": [GC_PATH, "gc"],
                            "GlobeLand30 - China 2020 (30m)": [GL_PATH, "gl"],
                            "P03": [p03_path, "clc"]
                            }
@@ -917,8 +918,7 @@ if __name__ == '__main__':
             p_arr, _ = rasters.read(p_dst)
 
     else:
-
-        dem_path = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
+        # Extract lulc path
         lulc_path = landcover_path_dict[landcover_name][0]
 
         # Produce k
@@ -994,7 +994,7 @@ if __name__ == '__main__':
         rasters.write(ls_arr, ls_path, ls_meta, nodata=0)
 
     elif ls_method == "Already provided":
-        with rasterio.open(raster_dict["ls"]) as ls_dst:
+        with rasterio.open(post_process_dict['ls']) as ls_dst:
             ls_arr, ls_meta = rasters.read(ls_dst)
 
 
