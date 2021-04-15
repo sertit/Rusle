@@ -806,7 +806,7 @@ def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
 
     # List conditions and choices
     conditions = [(a_arr < 6.7), (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
-                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2), (a_arr >= 36.2)]
+                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
     # Update arr with k values
