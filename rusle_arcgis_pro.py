@@ -35,6 +35,7 @@ import arcpy
 
 # Commande pour supprimer l'erreur suivante : "ValueError: GEOSGeom_createLinearRing_r returned a NULL pointer"
 import shapely
+
 shapely.speedups.disable()
 
 np.seterr(divide='ignore', invalid='ignore')
@@ -57,7 +58,7 @@ R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Rainfall_Erosi
 
 GLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Land_Cover\2019\PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
 GC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Globcover_2009\Globcover2009_V2.3_Global_\GLOBCOVER_L4_200901_200912_V2.3.tif"
-GL_PATH = "" # A ajouter
+GL_PATH = ""  # A ajouter
 
 EUDEM_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_dem_3035_europe.tif"
 SRTM30_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\SRTM_30m_v4\index.vrt"
@@ -132,6 +133,7 @@ def reproject_raster(src_file: str, dst_crs: str, resampling_method) -> str:
     with rasterio.open(src_file, "r") as src_dst:
         src_crs = src_dst.crs
 
+    # Check if the file does not have the good crs
     if src_crs != dst_crs:
 
         with rasterio.open(src_file) as src:
@@ -511,19 +513,6 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
 
     arcpy.AddMessage("-- Produce the LS factor --")
 
-    # # Get slope path
-    # slope_dem_d = os.path.join(tmp_dir, "slope_degrees.tif")
-
-    # Make slope degree commande
-    # cmd_slope_d = ["gdaldem",
-    #                "slope",
-    #                "-compute_edges",
-    #                strings.to_cmd_string(dem_path),
-    #                strings.to_cmd_string(slope_dem_d)]
-
-    # Run command
-    # misc.run_cli(cmd_slope_d)
-
     # Compute D8 flow directions
     grid = Grid.from_raster(dem_path, data_name='dem')
 
@@ -565,10 +554,6 @@ def produce_ls_factor(dem_path: str, ls_path: str, tmp_dir: str) -> (np.ndarray,
     # Open acc
     with rasterio.open(acc_path) as acc_dst:
         acc_band, meta = rasters.read(acc_dst)
-
-    # Open slope d
-    # with rasterio.open(slope_dem_d) as slope_dst:
-    #     slope_d, _ = rasters.read(slope_dst)
 
     # Make slope percentage command
     slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
@@ -820,8 +805,8 @@ def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
     arcpy.AddMessage("-- Produce the reclassed a --")
 
     # List conditions and choices
-    conditions = [a_arr < 6.7, (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
-                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2)]
+    conditions = [(a_arr < 6.7), (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
+                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2), (a_arr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
     # Update arr with k values
@@ -834,7 +819,7 @@ if __name__ == '__main__':
     # Logging
     logs.init_logger(LOGGER, logging.DEBUG)
 
-    ##### Parameters
+    # Load inputs
     aoi_path = str(arcpy.GetParameterAsText(0))
     location = str(arcpy.GetParameterAsText(1))
 
@@ -863,13 +848,12 @@ if __name__ == '__main__':
     # Define the reference CRS
     ref_crs = CRS.from_epsg(ref_epsg)
 
-
     # Create temp_dir if not exist
     tmp_dir = os.path.join(output_dir, "temp_dir")
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-    # Dict that store landcover name and landcover path
+    # Dict that store landcover name, landcover path and landcover label
     landcover_path_dict = {"Corine Land Cover - 2018 (100m)": [CLC_PATH, "clc"],
                            "Global Land Cover - Copernicus 2020 (100m)": [GLC_PATH, "glc"],
                            "GlobCover - ESA 2005 (300m)": [GC_PATH, "gc"],
@@ -877,11 +861,11 @@ if __name__ == '__main__':
                            "P03": [p03_path, "clc"]
                            }
 
+    # Store landcover path in a variable
+    lulc_path = landcover_path_dict[landcover_name][0]
+
     # Check if the AOI is located inside or outside Europe
     if location == "Europe":
-
-        # Store landcover path
-        lulc_path = landcover_path_dict[landcover_name][0]
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
@@ -918,8 +902,6 @@ if __name__ == '__main__':
             p_arr, _ = rasters.read(p_dst)
 
     else:
-        # Extract lulc path
-        lulc_path = landcover_path_dict[landcover_name][0]
 
         # Produce k
         k_arr, k_meta = produce_k_outside_europe(aoi_path)
@@ -967,7 +949,6 @@ if __name__ == '__main__':
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_arr, p_path, p_meta, nodata=0)
 
-
     # Check if ls need to be calculated or not
     if ls_method == "To be calculated":
 
@@ -978,6 +959,7 @@ if __name__ == '__main__':
                     "Other": other_dem_path
                     }
 
+        # Extract DEM path
         dem_path = dem_dict[dem_name]
 
         # Crop DEM
@@ -997,7 +979,6 @@ if __name__ == '__main__':
         with rasterio.open(post_process_dict['ls']) as ls_dst:
             ls_arr, ls_meta = rasters.read(ls_dst)
 
-
     # Check if fcover need to be calculated or not
     if fcover_method == "To be calculated":
         # Process fcover
@@ -1012,7 +993,6 @@ if __name__ == '__main__':
     elif fcover_method == "Already provided":
         with rasterio.open(post_process_dict["fcover"]) as fcover_dst:
             fcover_arr, meta_fcover = rasters.read(fcover_dst)
-
 
     # Mask lulc if del
     if del_path:
@@ -1058,7 +1038,7 @@ if __name__ == '__main__':
     a_path = os.path.join(output_dir, "a_rusle.tif")
     rasters.write(a_arr, a_path, a_meta, nodata=0)
 
-    # Reclass a
+    # Reclass a (Probleme avec le reclass des Na. A revoir !!)
     a_reclas_arr = produce_a_reclass_arr(a_arr)
     a_reclass_meta = a_meta.copy()
 
