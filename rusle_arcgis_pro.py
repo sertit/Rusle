@@ -149,6 +149,87 @@ class LandcoverStructure(ListEnum):
     P03 = "Corine Land Cover - 2018 (100m)"
 
 
+def spatial_resolution(raster_path: str) -> (float, float):  # OK
+    """
+    Extract the spatial resolution of a raster X, Y
+    Args:
+        raster_path (str) : raster path
+
+    Returns:
+    float : X resolution
+    float :Y resolution
+    """
+    raster = rasterio.open(raster_path)
+    t = raster.transform
+    x = t[0]
+    y = -t[4]
+    return x, y
+
+
+def epsg_from_arcgis_proj(arcgis_proj) -> None:
+    """
+    Extract espg code from arcgis proj
+    Args:
+        arcgis_proj () : Arcgis proj
+
+    Returns:
+        epsg_code : ndarray of the reclassed a raster
+    """
+    sr = arcpy.SpatialReference()
+    sr.loadFromString(arcgis_proj)
+    epsg_code = sr.factoryCode
+
+    return epsg_code
+
+
+def check_parameters(input_dict: dict) -> None:
+    """
+     Check if parameters values are ok
+    Args:
+        a_arr (np.ndarray) : a array
+
+    Returns:
+
+    """
+    # --- Extract parameters ---
+    aoi_path = input_dict.get("aoi_path")
+    location = input_dict.get("location")
+    fcover_method = input_dict.get("fcover_method")
+    landcover_name = input_dict.get("landcover_name")
+    p03_path = input_dict.get("p03_path")
+    del_path = input_dict.get("del_path")
+    ls_method = input_dict.get("ls_method")
+    dem_name = input_dict.get("dem_name")
+    other_dem_path = input_dict.get("other_dem_path")
+    output_resolution = input_dict.get("output_resolution")
+    ref_system = input_dict.get("ref_system")
+    output_dir = input_dict.get("output_dir")
+
+    # Check if landcover_name is valid
+    if landcover_name not in LandcoverType.list_values():
+        raise TypeError(f"landcover_name should be among {LandcoverType.list_values()}")
+    # Check if location is valid
+    if location not in LocationType.list_values():
+        raise TypeError(f"location should be among {LocationType.list_values()}")
+    # Check if fcover_method is valid
+    if fcover_method not in MethodType.list_values():
+        raise TypeError(f"fcover_method should be among {MethodType.list_values()}")
+    # Check if ls_method is valid
+    if ls_method not in MethodType.list_values():
+        raise TypeError(f"ls_method should be among {MethodType.list_values()}")
+    # Check if dem_name is valid
+    if dem_name not in DemType.list_values():
+        raise TypeError(f"ls_method should be among {DemType.list_values()}")
+
+    if (landcover_name == LandcoverType.P03.value) and (p03_path == None):
+        raise TypeError(f"P03_path is needed !")
+
+    if (dem_name == DemType.OTHER.value) and (other_dem_path == None):
+        raise TypeError(f"Dem path is needed !")
+
+    return
+
+
 def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
     """
     Produce the fcover index
@@ -395,23 +476,6 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     return c_xarr
 
 
-def spatial_resolution(raster_path: str) -> (float, float):  # OK
-    """
-    Extract the spatial resolution of a raster X, Y
-    Args:
-        raster_path (str) : raster path
-
-    Returns:
-    float : X resolution
-    float :Y resolution
-    """
-    raster = rasterio.open(raster_path)
-    t = raster.transform
-    x = t[0]
-    y = -t[4]
-    return x, y
-
-
 def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
     """
     Produce the LS factor raster
@@ -586,6 +650,93 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
     return crop_hwsd_xarr.copy(data=k_arr, deep=True)
 
 
+def make_raster_list_to_pre_process(input_dict: dict) -> dict:
+    """
+    A faire
+    Args:
+        input_dict (dict) :
+
+    Returns:
+        dict :
+    """
+
+    # --- Extract parameters ---
+    aoi_path = input_dict.get("aoi_path")
+    location = input_dict.get("location")
+    fcover_method = input_dict.get("fcover_method")
+    fcover_path = input_dict.get("fcover_path")
+    nir_path = input_dict.get("nir_path")
+    red_path = input_dict.get("red_path")
+    landcover_name = input_dict.get("landcover_name")
+    p03_path = input_dict.get("p03_path")
+    ls_method = input_dict.get("ls_method")
+    ls_path = input_dict.get("ls_path")
+    output_dir = input_dict.get("output_dir")
+
+    # Create temp_dir if not exist
+    tmp_dir = os.path.join(output_dir, "temp_dir")
+    if not os.path.exists(tmp_dir):
+        os.makedirs(tmp_dir)
+
+    # Dict that store landcover name, landcover path and landcover label
+    landcover_path_dict = {LandcoverType.CLC.value: CLC_PATH,
+                           LandcoverType.GLC.value: GLC_PATH,
+                           LandcoverType.GC.value: GC_PATH,
+                           LandcoverType.GL.value: GL_PATH,
+                           LandcoverType.P03.value: p03_path
+                           }
+
+    # Store landcover path in a variable
+    lulc_path = landcover_path_dict[landcover_name]
+
+    if location == LocationType.EUROPE.value:
+
+        # Dict that store raster to pre_process and the type of resampling
+        raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
+                       "k": [K_EURO_PATH, Resampling.bilinear],
+                       "lulc": [lulc_path, Resampling.nearest],
+                       "p": [P_EURO_PATH, Resampling.bilinear]
+                       }
+
+        # Add the ls raster to the pre process dict if provided
+        if ls_method == MethodType.ALREADY_PROVIDED.value:
+            raster_dict["ls"] = [ls_path, Resampling.bilinear]
+
+        # Add bands to the pre process dict if fcover need to be calculated or not
+        if fcover_method == MethodType.TO_BE_CALCULATED.value:
+            raster_dict["red"] = [red_path, Resampling.bilinear]
+            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
+            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
+
+    elif location == LocationType.GLOBAL.value:
+
+        # Produce k
+        k_xarr = produce_k_outside_europe(aoi_path)
+        # Write k raster
+        k_path = os.path.join(tmp_dir, 'k_raw.tif')
+        rasters.write(k_xarr, k_path, nodata=0)
+
+        # Dict that store raster to pre_process and the type of resampling
+        raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
+                       "lulc": [lulc_path, Resampling.nearest],
+                       "k": [k_path, Resampling.nearest]
+                       }
+
+        # Add the ls raster to the pre process dict if provided
+        if ls_method == MethodType.ALREADY_PROVIDED.value:
+            raster_dict["ls"] = [ls_path, Resampling.bilinear]
+
+        # Add bands to the pre process dict if fcover need to be calculated or not
+        if fcover_method == MethodType.TO_BE_CALCULATED.value:
+            raster_dict["red"] = [red_path, Resampling.bilinear]
+            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
+            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
+
+    return raster_dict
+
+
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
                           tmp_dir: str) -> dict:  # OK
     """
@@ -696,157 +847,6 @@ def produce_a_reclass_arr(a_xarr: np.ndarray) -> (XDS_TYPE):
     a_reclass_arr = np.select(conditions, choices, default=np.nan)
 
     return a_xarr.copy(data=a_reclass_arr)
-
-
-def epsg_from_arcgis_proj(arcgis_proj) -> None:
-    """
-    Extract espg code from arcgis proj
-    Args:
-        arcgis_proj () : Arcgis proj
-
-    Returns:
-        epsg_code : ndarray of the reclassed a raster
-    """
-    sr = arcpy.SpatialReference()
-    sr.loadFromString(arcgis_proj)
-    epsg_code = sr.factoryCode
-
-    return epsg_code
-
-
-def check_parameters(input_dict: dict) -> None:
-    """
-     Check if parameters values are ok
-    Args:
-        a_arr (np.ndarray) : a array
-
-    Returns:
-
-    """
-    # --- Extract parameters ---
-    aoi_path = input_dict.get("aoi_path")
-    location = input_dict.get("location")
-    fcover_method = input_dict.get("fcover_method")
-    landcover_name = input_dict.get("landcover_name")
-    p03_path = input_dict.get("p03_path")
-    del_path = input_dict.get("del_path")
-    ls_method = input_dict.get("ls_method")
-    dem_name = input_dict.get("dem_name")
-    other_dem_path = input_dict.get("other_dem_path")
-    output_resolution = input_dict.get("output_resolution")
-    ref_system = input_dict.get("ref_system")
-    output_dir = input_dict.get("output_dir")
-
-    # Check if landcover_name is valid
-    if landcover_name not in LandcoverType.list_values():
-        raise TypeError(f"landcover_name should be among {LandcoverType.list_values()}")
-    # Check if location is valid
-    if location not in LocationType.list_values():
-        raise TypeError(f"location should be among {LocationType.list_values()}")
-    # Check if fcover_method is valid
-    if fcover_method not in MethodType.list_values():
-        raise TypeError(f"fcover_method should be among {MethodType.list_values()}")
-    # Check if ls_method is valid
-    if ls_method not in MethodType.list_values():
-        raise TypeError(f"ls_method should be among {MethodType.list_values()}")
-    # Check if dem_name is valid
-    if dem_name not in DemType.list_values():
-        raise TypeError(f"ls_method should be among {DemType.list_values()}")
-
-    if (landcover_name == LandcoverType.P03.value) and (p03_path == None):
-        raise TypeError(f"P03_path is needed !")
-
-    if (dem_name == DemType.OTHER.value) and (other_dem_path == None):
-        raise TypeError(f"Dem path is needed !")
-
-    return
-
-
-def make_raster_list_to_pre_process(input_dict: dict):
-    """
-    A faire
-    Args:
-        input_dict (dict) :
-
-    Returns:
-        dict :
-    """
-
-    # --- Extract parameters ---
-    aoi_path = input_dict.get("aoi_path")
-    location = input_dict.get("location")
-    fcover_method = input_dict.get("fcover_method")
-    fcover_path = input_dict.get("fcover_path")
-    nir_path = input_dict.get("nir_path")
-    red_path = input_dict.get("red_path")
-    landcover_name = input_dict.get("landcover_name")
-    p03_path = input_dict.get("p03_path")
-    ls_method = input_dict.get("ls_method")
-    ls_path = input_dict.get("ls_path")
-    output_dir = input_dict.get("output_dir")
-
-    # Create temp_dir if not exist
-    tmp_dir = os.path.join(output_dir, "temp_dir")
-    if not os.path.exists(tmp_dir):
-        os.makedirs(tmp_dir)
-
-    # Dict that store landcover name, landcover path and landcover label
-    landcover_path_dict = {LandcoverType.CLC.value: CLC_PATH,
-                           LandcoverType.GLC.value: GLC_PATH,
-                           LandcoverType.GC.value: GC_PATH,
-                           LandcoverType.GL.value: GL_PATH,
-                           LandcoverType.P03.value: p03_path
-                           }
-
-    # Store landcover path in a variable
-    lulc_path = landcover_path_dict[landcover_name]
-
-    if location == LocationType.EUROPE.value:
-
-        # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
-                       "k": [K_EURO_PATH, Resampling.bilinear],
-                       "lulc": [lulc_path, Resampling.nearest],
-                       "p": [P_EURO_PATH, Resampling.bilinear]
-                       }
-
-        # Add the ls raster to the pre process dict if provided
-        if ls_method == MethodType.ALREADY_PROVIDED.value:
-            raster_dict["ls"] = [ls_path, Resampling.bilinear]
-
-        # Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_method == MethodType.TO_BE_CALCULATED.value:
-            raster_dict["red"] = [red_path, Resampling.bilinear]
-            raster_dict["nir"] = [nir_path, Resampling.bilinear]
-        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
-            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
-
-    elif location == LocationType.GLOBAL.value:
-
-        # Produce k
-        k_xarr = produce_k_outside_europe(aoi_path)
-        # Write k raster
-        k_path = os.path.join(tmp_dir, 'k_raw.tif')
-        rasters.write(k_xarr, k_path, nodata=0)
-
-        # Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
-                       "lulc": [lulc_path, Resampling.nearest],
-                       "k": [k_path, Resampling.nearest]
-                       }
-
-        # Add the ls raster to the pre process dict if provided
-        if ls_method == MethodType.ALREADY_PROVIDED.value:
-            raster_dict["ls"] = [ls_path, Resampling.bilinear]
-
-        # Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_method == MethodType.TO_BE_CALCULATED.value:
-            raster_dict["red"] = [red_path, Resampling.bilinear]
-            raster_dict["nir"] = [nir_path, Resampling.bilinear]
-        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
-            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
-
-    return raster_dict
 
 
 def produce_rusle(input_dict: dict) -> None:
@@ -966,7 +966,6 @@ def produce_rusle(input_dict: dict) -> None:
         with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
             lulc_xarr = rasters.read(lulc_dst)
 
-    # ------------------------------------------------------- Reprendre ici
     # Process C
     c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
 
@@ -1049,10 +1048,9 @@ if __name__ == '__main__':
     #     "ref_system": arcpy.GetParameterAsText(14),
     #     "output_dir": str(arcpy.GetParameterAsText(15))}
 
-
     input_dict = {
         "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
-        "location": "Europe",
+        "location": "Global",
         "fcover_method": "To be calculated",
         "fcover_path": None,
         "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
