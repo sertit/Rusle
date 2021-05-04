@@ -17,14 +17,10 @@ from enum import unique
 import numpy as np
 import xarray as xr
 import rasterio
-from rasterio import MemoryFile
 from rasterio.crs import CRS
-from rasterio.mask import mask
-from rasterio.warp import calculate_default_transform, reproject
 import geopandas as gpd
 from rasterio.enums import Resampling
 from rasterstats import zonal_stats
-from sertit import rasters_rio
 
 from sertit import strings, misc, rasters, files, logs
 from eoreader.bands.index import _norm_diff
@@ -113,17 +109,6 @@ class LandcoverType(ListEnum):
     P03 = "P03"
 
 
-class LandcoverStructure(ListEnum):
-    """
-    List of the Landcover type (Coding)
-    """
-    CLC = "Corine Land Cover - 2018 (100m)"
-    GLC = "Global Land Cover - Copernicus 2020 (100m)"
-    GC = "GlobCover - ESA 2005 (300m)"
-    GL = "GlobeLand30 - China 2020 (30m)"
-    P03 = "Corine Land Cover - 2018 (100m)"
-
-
 @unique
 class LocationType(ListEnum):
     """
@@ -153,104 +138,15 @@ class DemType(ListEnum):
     OTHER = "Other"
 
 
-def get_crs(raster_path: str) -> CRS:  # OK
+class LandcoverStructure(ListEnum):
     """
-    Get CRS (and check if it is in projected CRS)
-    Args:
-        raster_path (str): RASTER Path
-
-    Returns:
-        CRS: RASTER CRS
+    List of the Landcover type (Coding)
     """
-    with rasterio.open(raster_path, "r") as raster_dst:
-        # Check if RASTER is in geo format
-        if not raster_dst.crs.is_projected:
-            raise Exception("Raster should be projected.")
-
-        # Get RASTER CRS
-        return raster_dst.crs
-
-
-def reproj_shp(shp_path: str, raster_crs: CRS) -> str:  # OK
-    """
-    Reproject shp to raster crs
-    Args:
-        shp_path (str): Delineation vector path
-        raster_crs (CRS): DEM CRS
-
-    Returns:
-        str: Reprojected delineation path
-    """
-    # Reproj shape vector if needed
-    vec = gpd.read_file(shp_path)
-    if vec.crs != raster_crs:
-        arcpy.AddMessage("Reproject shp vector to CRS {}".format(raster_crs))
-        # A modifier start
-        if not "EPSG:" in str(raster_crs):
-            epsg_code = "custom"
-        else:
-            epsg_code = str(raster_crs)[5:]
-        # A modifier end
-        reproj_vec = os.path.join(os.path.splitext(shp_path)[0] + "_reproj_{}".format(epsg_code))
-
-        # Check if reproject shp already exist
-        if os.path.isfile(reproj_vec) == False:
-            # Reproject vector and write to file
-            vec = vec.to_crs(raster_crs)
-            vec.to_file(reproj_vec, driver="ESRI Shapefile")
-
-        return reproj_vec
-
-    else:
-        return shp_path
-
-
-def reproject_raster(src_file: str, dst_crs: str, resampling_method) -> str:  # OK
-    """
-    Reproject raster to dst crs
-    Args:
-        src_file (str): Raster path
-        dst_crs (CRS): dst CRS
-
-    Returns:
-        str: Reprojected raster path
-    """
-    arcpy.AddMessage("Reprojecting")
-
-    # Extract crs of the dem
-    with rasterio.open(src_file, "r") as src_dst:
-        src_crs = src_dst.crs
-
-    # Check if the file does not have the good crs
-    if src_crs != dst_crs:
-
-        with rasterio.open(src_file) as src:
-            transform, width, height = calculate_default_transform(
-                src.crs, dst_crs, src.width, src.height, *src.bounds)
-            kwargs = src.meta.copy()
-            kwargs.update({
-                'crs': dst_crs,
-                'transform': transform,
-                'width': width,
-                'height': height
-            })
-
-            dst_file = os.path.join(os.path.splitext(src_file)[0] + "_reproj_{}.tif".format(str(dst_crs)[5:]))
-            with rasterio.open(dst_file, 'w', **kwargs) as dst:
-                for i in range(1, src.count + 1):
-                    reproject(
-                        source=rasterio.band(src, i),
-                        destination=rasterio.band(dst, i),
-                        src_transform=src.transform,
-                        src_crs=src.crs,
-                        dst_transform=transform,
-                        dst_crs=dst_crs,
-                        resampling=resampling_method)
-
-        return dst_file
-
-    else:
-        return src_file
+    CLC = "Corine Land Cover - 2018 (100m)"
+    GLC = "Global Land Cover - Copernicus 2020 (100m)"
+    GC = "GlobCover - ESA 2005 (300m)"
+    GL = "GlobeLand30 - China 2020 (30m)"
+    P03 = "Corine Land Cover - 2018 (100m)"
 
 
 def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
@@ -301,32 +197,6 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
     fcover_xarr = (ndvi_crop_xarr.astype(np.float32) - ndvi_min) / (ndvi_max - ndvi_min)
 
     return fcover_xarr
-
-
-def update_raster(raster_path: str, shp_path: str, value: int) -> (XDS_TYPE):  # OK
-    """
-    Update raster values covered by the shape
-    Args:
-        raster_path (str): raster path
-        shp_path (str): shape path
-        output_raster_path (str): output raster path
-        value (int) : value set to the updated cells
-
-    Returns:
-        np.ndarray : ndarray of the updated raster
-        dict : metadata of the updated raster
-    """
-
-    # arcpy.AddMessage("-- Update raster values covered by the shape --")
-
-    # Convert shape to gdf
-    shp_gdf = gpd.read_file(shp_path)
-
-    # Mask the raster with the geometries
-    with rasterio.open(raster_path) as src:
-        out_xarr = rasters.mask(src, shp_gdf, invert=True, nodata=value)
-
-    return out_xarr
 
 
 def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):  # OK
@@ -717,7 +587,7 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
 
 
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
-                          tmp_dir: str) -> dict: # OK
+                          tmp_dir: str) -> dict:  # OK
     """
     Pre process a list of raster (clip, reproj, collocate)
     Args:
@@ -1113,7 +983,7 @@ def produce_rusle(input_dict: dict) -> None:
         # Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_xarr, p_path, nodata=0)
-    elif location == LocationType.EUROPE.value :
+    elif location == LocationType.EUROPE.value:
         with rasterio.open(post_process_dict["p"]) as p_dst:
             p_xarr = rasters.read(p_dst)
 
@@ -1160,9 +1030,29 @@ if __name__ == '__main__':
     arcpy.CheckOutExtension("Spatial")
 
     # --- Parameters ---
+    # Load inputs
+    # input_dict = {
+    #     "aoi_path": str(arcpy.GetParameterAsText(0)),
+    #     "location": str(arcpy.GetParameterAsText(1)),
+    #     "fcover_method": str(arcpy.GetParameterAsText(2)),
+    #     "fcover_path": str(arcpy.GetParameterAsText(3)),
+    #     "nir_path": str(arcpy.GetParameterAsText(4)),
+    #     "red_path": str(arcpy.GetParameterAsText(5)),
+    #     "landcover_name": str(arcpy.GetParameterAsText(6)),
+    #     "p03_path": str(arcpy.GetParameterAsText(7)),
+    #     "del_path": str(arcpy.GetParameterAsText(8)),
+    #     "ls_method": str(arcpy.GetParameterAsText(9)),
+    #     "ls_path": str(arcpy.GetParameterAsText(10)),
+    #     "dem_name": str(arcpy.GetParameterAsText(11)),
+    #     "other_dem_path": str(arcpy.GetParameterAsText(12)),
+    #     "output_resolution": int(str(arcpy.GetParameterAsText(13))),
+    #     "ref_system": arcpy.GetParameterAsText(14),
+    #     "output_dir": str(arcpy.GetParameterAsText(15))}
+
+
     input_dict = {
         "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
-        "location": "Global",
+        "location": "Europe",
         "fcover_method": "To be calculated",
         "fcover_path": None,
         "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
