@@ -7,7 +7,7 @@ __author__ = "Ledauphin Thomas"
 __contact__ = "tledauphin@unistra.fr"
 __python__ = "3.5.0"
 __created__ = "24/02/2021"
-__update__ = ""
+__update__ = "04/05/2021"
 __copyrights__ = "(c) SERTIT 2021"
 
 import os
@@ -24,6 +24,7 @@ from rasterio.warp import calculate_default_transform, reproject
 import geopandas as gpd
 from rasterio.enums import Resampling
 from rasterstats import zonal_stats
+from sertit import rasters_rio
 
 from sertit import strings, misc, rasters, files, logs
 from eoreader.bands.index import _norm_diff
@@ -296,10 +297,10 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
     ndvi_min = ndvi_stat[0]['min']
     ndvi_max = ndvi_stat[0]['max']
 
-    # Fcover calculation (A vérifier que ce soit bien du xarr qui ressorte)
-    fcover_arr = (ndvi_crop_xarr.astype(np.float32) - ndvi_min) / (ndvi_max - ndvi_min)
+    # Fcover calculation
+    fcover_xarr = (ndvi_crop_xarr.astype(np.float32) - ndvi_min) / (ndvi_max - ndvi_min)
 
-    return fcover_arr
+    return fcover_xarr
 
 
 def update_raster(raster_path: str, shp_path: str, value: int) -> (XDS_TYPE):  # OK
@@ -376,7 +377,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # Initialize arable arr
-    arable_c_xarr = xr.full_like(raster_arr, fill_value=0.27)
+    arable_c_xarr = xr.full_like(raster_xarr, fill_value=0.27)
 
     # Reproject europe_countries
     crs_arable = arable_c_xarr.rio.crs
@@ -386,28 +387,29 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
     # Update arable_arr with arable_dict
     for key in list(europe_countries['COUNTRY']):
         geoms = [feature for feature in europe_countries[europe_countries['COUNTRY'] == key]['geometry']]
-        arable_c_xarr = mask(arable_c_xarr, geoms, invert=True)
+        arable_c_xarr = rasters.paint(arable_c_xarr, geoms, value=arable_c_dict[key])
+
+    # Mask  result with aoi
+    arable_c_xarr = rasters.mask(arable_c_xarr, aoi)
 
     return arable_c_xarr
 
 
-def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_path: str, lulc_name: str) -> (
-        np.ndarray, dict):  # NOK
+def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_name: str) -> (
+        XDS_TYPE):  # NOK
     """
     Produce C index
     Args:
-        lulc_arr (np.ndarray): lulc array
-        meta_lulc (dict): lulc metadata
-        fcover_arr (np.ndarray) :fcover array
+        lulc_xarr (XDS_TYPE): lulc xarray
+        fcover_xarr (XDS_TYPE) :fcover xarray
         aoi_path (str): aoi path
         lulc_name (str) : name of the LULC
 
     Returns:
-        np.ndarray : ndarray of the c index raster
-        dict : metadata of the c index raster
+        XDS_TYPE : xdarray of the c index raster
     """
     arcpy.AddMessage("-- Produce C index --")
-
+    print(lulc_name)
     # Identify Cfactor
     # Cfactor dict and c_arr_arable
     if lulc_name == LandcoverStructure.CLC.value:
@@ -433,8 +435,8 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
             335: [0, 0]
         }
         # Produce arable c
-        arable_c_arr, _ = produce_c_arable_europe(aoi_path, lulc_arr, meta_lulc)
-        c_arr_arable = np.where(lulc_arr == 211, arable_c_arr, np.nan)
+        arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
+        c_xarr_arable = rasters.where(lulc_xarr == 211, arable_c_xarr, np.nan)
     # Global Land Cover - Copernicus 2020 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
@@ -459,7 +461,8 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
             70: [0, 0]
         }
         # Produce arable c
-        c_arr_arable = np.where(np.isin(lulc_arr, [11, 14, 20]), 0.27, np.nan)
+        c_arr_arable = np.where(np.isin(lulc_xarr, [11, 14, 20]), 0.27, np.nan)
+        c_xarr_arable = lulc_xarr.copy(data=c_arr_arable)
 
     # GlobCover - ESA 2005 (300m)
     elif lulc_name == LandcoverStructure.GC.value:
@@ -486,7 +489,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
             220: [0, 0]
         }
         # Produce arable c
-        c_arr_arable = np.where(lulc_arr == 40, 0.27, np.nan)
+        c_xarr_arable = rasters.where(lulc_xarr == 40, 0.27, np.nan)
 
     # GlobeLand30 - China 2020 (30m)
     elif lulc_name == LandcoverStructure.GL.value:
@@ -499,7 +502,7 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
             110: [0.10000000000, 0.45000000000]
         }
         # Produce arable c
-        c_arr_arable = np.where(lulc_arr == 10, 0.27, np.nan)
+        c_xarr_arable = rasters.where(lulc_xarr == 10, 0.27, np.nan)
 
     # List init
     conditions = []
@@ -507,17 +510,19 @@ def produce_c(lulc_arr: np.ndarray, meta_lulc: dir, fcover_arr: np.ndarray, aoi_
 
     # List conditions and choices for C non arable
     for key in cfactor_dict:
-        conditions.append(lulc_arr == key)
+        conditions.append(lulc_xarr == key)
         choices.append(cfactor_dict[key][0] + (cfactor_dict[key][1] - cfactor_dict[key][0]) * (
-                1 - fcover_arr.astype(np.float32)))
+                1 - fcover_xarr.astype(np.float32)))
 
     # C non arable calculation
     c_arr_non_arable = np.select(conditions, choices, default=np.nan)
 
     # Merge arable and non arable c values
-    c_arr = np.where(np.isnan(c_arr_non_arable), c_arr_arable, c_arr_non_arable)
+    c_arr = np.where(np.isnan(c_arr_non_arable), c_xarr_arable, c_arr_non_arable)
 
-    return c_arr, meta_lulc
+    c_xarr = c_xarr_arable.copy(data=c_arr)
+
+    return c_xarr
 
 
 def spatial_resolution(raster_path: str) -> (float, float):  # OK
@@ -636,15 +641,11 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
 
     arcpy.AddMessage("-- Produce the K index outside Europe --")
 
-    # Extract crs of the hwsd
-    with rasterio.open(HWSD_PATH, "r") as hwsd_dst:
-        hwsd_crs = hwsd_dst.crs
-
-    # Reproject the shp
-    aoi_reproj_path = reproj_shp(aoi_path, hwsd_crs)
+    # Read the aoi file
+    aoi_gdf = gpd.read_file(aoi_path)
 
     # Crop hwsd
-    crop_hwsd_path, crop_hwsd_arr, crop_hwsd_meta = crop_raster(aoi_reproj_path, HWSD_PATH, tmp_dir)
+    crop_hwsd_xarr = rasters.crop(HWSD_PATH, aoi_gdf)
 
     # Extract soil information from ce access DB
     conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + DBFILE_PATH + ';')
@@ -706,18 +707,17 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
 
     # List conditions and choices for C non arable
     for key in k_dict:
-        conditions.append(crop_hwsd_arr == key)
+        conditions.append(crop_hwsd_xarr == key)
         choices.append(k_dict[key])
 
     # Update arr with k values
     k_arr = np.select(conditions, choices, default=np.nan)
-    k_meta = crop_hwsd_meta.copy()
 
-    return k_arr, k_meta
+    return crop_hwsd_xarr.copy(data=k_arr, deep=True)
 
 
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
-                          tmp_dir: str) -> dict:
+                          tmp_dir: str) -> dict: # OK
     """
     Pre process a list of raster (clip, reproj, collocate)
     Args:
@@ -786,46 +786,46 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     return out_dict
 
 
-def produce_a_arr(r_arr: np.ndarray, k_arr: np.ndarray, ls_arr: np.ndarray, c_arr: np.ndarray,
-                  p_arr: np.ndarray) -> np.ndarray:
+def produce_a_arr(r_xarr: XDS_TYPE, k_xarr: XDS_TYPE, ls_xarr: XDS_TYPE, c_xarr: XDS_TYPE,
+                  p_xarr: XDS_TYPE) -> XDS_TYPE:
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
-        r_arr (np.ndarray): multi-annual average index array
-        k_arr (np.ndarray): susceptibility of a soil to erode array
-        ls_arr (np.ndarray) :combined Slope Length and Slope Steepness factor array
-        c_arr (np.ndarray) : Cover management factor array
-        p_arr (np.ndarray) : support practices factor array
+        r_arr (XDS_TYPE): multi-annual average index xarray
+        k_arr (XDS_TYPE): susceptibility of a soil to erode xarray
+        ls_arr (XDS_TYPE) :combined Slope Length and Slope Steepness factor xarray
+        c_arr (XDS_TYPE) : Cover management factor xarray
+        p_arr (XDS_TYPE) : support practices factor xarray
 
     Returns:
-        np.ndarray : ndarray of the average annual soil loss (ton/ha/year)
+        XDS_TYPE : xarray of the average annual soil loss (ton/ha/year)
     """
     arcpy.AddMessage("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
-    return r_arr * k_arr * ls_arr * c_arr * p_arr
+    return r_xarr * k_xarr * ls_xarr * c_xarr * p_xarr
 
 
-def produce_a_reclass_arr(a_arr: np.ndarray) -> (np.ndarray, dict):
+def produce_a_reclass_arr(a_xarr: np.ndarray) -> (XDS_TYPE):
     """
     Produce reclassed a
     Args:
         a_arr (np.ndarray) : a array
 
     Returns:
-        np.ndarray : ndarray of the reclassed a raster
+        XDS_TYPEy : xarray of the reclassed a raster
     """
 
     arcpy.AddMessage("-- Produce the reclassed a --")
 
     # List conditions and choices
-    conditions = [(a_arr < 6.7), (a_arr >= 6.7) & (a_arr < 11.2), (a_arr >= 11.2) & (a_arr < 22.4),
-                  (a_arr >= 22.4) & (a_arr < 33.6), (a_arr >= 36.2)]
+    conditions = [(a_xarr < 6.7), (a_xarr >= 6.7) & (a_xarr < 11.2), (a_xarr >= 11.2) & (a_xarr < 22.4),
+                  (a_xarr >= 22.4) & (a_xarr < 33.6), (a_xarr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
     # Update arr with k values
     a_reclass_arr = np.select(conditions, choices, default=np.nan)
 
-    return a_reclass_arr
+    return a_xarr.copy(data=a_reclass_arr)
 
 
 def epsg_from_arcgis_proj(arcgis_proj) -> None:
@@ -858,6 +858,7 @@ def check_parameters(input_dict: dict) -> None:
     location = input_dict.get("location")
     fcover_method = input_dict.get("fcover_method")
     landcover_name = input_dict.get("landcover_name")
+    p03_path = input_dict.get("p03_path")
     del_path = input_dict.get("del_path")
     ls_method = input_dict.get("ls_method")
     dem_name = input_dict.get("dem_name")
@@ -953,10 +954,10 @@ def make_raster_list_to_pre_process(input_dict: dict):
     elif location == LocationType.GLOBAL.value:
 
         # Produce k
-        k_arr, k_meta = produce_k_outside_europe(aoi_path)
+        k_xarr = produce_k_outside_europe(aoi_path)
         # Write k raster
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
-        rasters.write(k_arr, k_path, k_meta, nodata=0)
+        rasters.write(k_xarr, k_path, nodata=0)
 
         # Dict that store raster to pre_process and the type of resampling
         raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
@@ -1080,62 +1081,63 @@ def produce_rusle(input_dict: dict) -> None:
         del_gdf = gpd.read_file(del_path)
 
         lulc_process_path = post_process_dict["lulc"]
+
         # Update the lulc with the del
-        lulc_del_xarr = rasters.mask(lulc_process_path, del_gdf, invert=True, nodata=334)
+        lulc_del_xarr = rasters.paint(lulc_process_path, del_gdf, value=334)
 
         # Write the lulc with fire
         lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
-        rasters.write(lulc_del_xarr, lulc_masked_path)
+        rasters.write(lulc_del_xarr, lulc_masked_path, nodata=0)
 
-
-        # Mask raster with AOI
-        lulc_xarr= rasters.mask(lulc_del_xarr, aoi_gdf)
-
-        # Write masked raster
-        raster_masked_path = os.path.join(tmp_dir, "lulc_with_fire_masked.tif")
-        rasters.write(lulc_xarr, raster_masked_path, nodata=0)
+        lulc_xarr = lulc_del_xarr.copy()
 
     else:
         # Open the lulc raster
         with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
             lulc_xarr = rasters.read(lulc_dst)
 
-    # ---- OK
-
+    # ------------------------------------------------------- Reprendre ici
     # Process C
-    c_arr, c_meta = produce_c(lulc_xarr, fcover_xarr)
+    c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
 
     # Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
-    rasters.write(c_arr, c_out, c_meta, nodata=0)
+    rasters.write(c_xarr, c_out, nodata=0)
 
     # Produce p if location is GLOBAL
     if location == LocationType.GLOBAL.value:
         # Produce p
         p_value = 1  # Can change
-        p_arr = c_arr.copy()
-        p_arr.fill(p_value)
+        p_xarr = xr.full_like(c_xarr, fill_value=p_value)
 
         # Write p
-        p_meta = r_meta.copy()
         p_path = os.path.join(tmp_dir, "p.tif")
-        rasters.write(p_arr, p_path, p_meta, nodata=0)
+        rasters.write(p_xarr, p_path, nodata=0)
+    elif location == LocationType.EUROPE.value :
+        with rasterio.open(post_process_dict["p"]) as p_dst:
+            p_xarr = rasters.read(p_dst)
+
+    # Open r
+    with rasterio.open(post_process_dict["r"]) as r_dst:
+        r_xarr = rasters.read(r_dst)
+
+    # Open k
+    with rasterio.open(post_process_dict["k"]) as k_dst:
+        k_xarr = rasters.read(k_dst)
 
     # Produce a with RUSLE model
-    a_meta = meta_fcover.copy()
-    a_arr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
+    a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
 
     # Write the a raster
     a_path = os.path.join(output_dir, "a_rusle.tif")
-    rasters.write(a_arr, a_path, a_meta, nodata=0)
+    rasters.write(a_xarr, a_path, nodata=0)
 
     # Reclass a (Probleme avec le reclass des Na. A revoir !!)
-    a_reclas_arr = produce_a_reclass_arr(a_arr)
-    a_reclass_meta = a_meta.copy()
+    a_reclas_xarr = produce_a_reclass_arr(a_xarr)
 
     # Write the a raster
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
-    rasters.write(a_reclas_arr, a_reclass_path, a_reclass_meta, nodata=0)
+    rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
 
     return
 
@@ -1158,28 +1160,9 @@ if __name__ == '__main__':
     arcpy.CheckOutExtension("Spatial")
 
     # --- Parameters ---
-    # Load inputs
-    # input_dict = {
-    #     "aoi_path": str(arcpy.GetParameterAsText(0)),
-    #     "location": str(arcpy.GetParameterAsText(1)),
-    #     "fcover_method": str(arcpy.GetParameterAsText(2)),
-    #     "fcover_path": str(arcpy.GetParameterAsText(3)),
-    #     "nir_path": str(arcpy.GetParameterAsText(4)),
-    #     "red_path": str(arcpy.GetParameterAsText(5)),
-    #     "landcover_name": str(arcpy.GetParameterAsText(6)),
-    #     "p03_path": str(arcpy.GetParameterAsText(7)),
-    #     "del_path": str(arcpy.GetParameterAsText(8)),
-    #     "ls_method": str(arcpy.GetParameterAsText(9)),
-    #     "ls_path": str(arcpy.GetParameterAsText(10)),
-    #     "dem_name": str(arcpy.GetParameterAsText(11)),
-    #     "other_dem_path": str(arcpy.GetParameterAsText(12)),
-    #     "output_resolution": int(str(arcpy.GetParameterAsText(13))),
-    #     "ref_system": arcpy.GetParameterAsText(14),
-    #     "output_dir": str(arcpy.GetParameterAsText(15))}
-
     input_dict = {
         "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
-        "location": "Europe",
+        "location": "Global",
         "fcover_method": "To be calculated",
         "fcover_path": None,
         "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
@@ -1201,13 +1184,13 @@ if __name__ == '__main__':
         arcpy.AddMessage('RUSLE was a success.')
 
         # Add to the current map if exist
-        arcpy.MakeRasterLayer_management(input_dict["output_file"])
-        aprx = arcpy.mp.ArcGISProject("CURRENT")
-        map = aprx.listMaps('*')
-        if len(map) != 0:  # A améliorer !!!
-            map = aprx.listMaps('*')[0]
-            if map is not None:
-                raster = map.addDataFromPath(input_dict["output_file"])
+        # arcpy.MakeRasterLayer_management(input_dict["output_dir"])
+        # aprx = arcpy.mp.ArcGISProject("CURRENT")
+        # map = aprx.listMaps('*')
+        # if len(map) != 0:
+        #     map = aprx.listMaps('*')[0]
+        #     if map is not None:
+        #         raster = map.addDataFromPath(input_dict["output_file"])
 
     except Exception as ex:
         import traceback
