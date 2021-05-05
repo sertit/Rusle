@@ -7,7 +7,7 @@ __author__ = "Ledauphin Thomas"
 __contact__ = "tledauphin@unistra.fr"
 __python__ = "3.5.0"
 __created__ = "24/02/2021"
-__update__ = "04/05/2021"
+__update__ = "05/05/2021"
 __copyrights__ = "(c) SERTIT 2021"
 
 import os
@@ -36,13 +36,12 @@ import arcpy
 import shapely
 from shapely import speedups
 
-# Commande pour supprimer l'erreur suivante : "ValueError: GEOSGeom_createLinearRing_r returned a NULL pointer"
 shapely.speedups.disable()
 
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
-LOGGER = logging.getLogger("rusle")
+LOGGER = logging.getLogger("RUSLE")
 
 WORLD_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"
 EUROPE_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\europe_countries_poly.shp"
@@ -149,7 +148,7 @@ class LandcoverStructure(ListEnum):
     P03 = "Corine Land Cover - 2018 (100m)"
 
 
-def spatial_resolution(raster_path: str) -> (float, float):  # OK
+def spatial_resolution(raster_path: str) -> (float, float):
     """
     Extract the spatial resolution of a raster X, Y
     Args:
@@ -184,53 +183,55 @@ def epsg_from_arcgis_proj(arcgis_proj) -> None:
 
 def check_parameters(input_dict: dict) -> None:
     """
-     Check if parameters values are ok
+     Check if parameters values are valid
     Args:
-        a_arr (np.ndarray) : a array
+        input_dict (dict) : dict with parameters values
 
     Returns:
 
     """
-    # --- Extract parameters ---
-    aoi_path = input_dict.get("aoi_path")
+    # ---- Extract parameters
+    # aoi_path = input_dict.get("aoi_path")
     location = input_dict.get("location")
     fcover_method = input_dict.get("fcover_method")
     landcover_name = input_dict.get("landcover_name")
     p03_path = input_dict.get("p03_path")
-    del_path = input_dict.get("del_path")
+    # del_path = input_dict.get("del_path")
     ls_method = input_dict.get("ls_method")
     dem_name = input_dict.get("dem_name")
     other_dem_path = input_dict.get("other_dem_path")
-    output_resolution = input_dict.get("output_resolution")
-    ref_system = input_dict.get("ref_system")
-    output_dir = input_dict.get("output_dir")
+    # output_resolution = input_dict.get("output_resolution")
+    # ref_system = input_dict.get("ref_system")
+    # output_dir = input_dict.get("output_dir")
 
-    # Check if landcover_name is valid
+    # -- Check if landcover_name is valid
     if landcover_name not in LandcoverType.list_values():
         raise TypeError(f"landcover_name should be among {LandcoverType.list_values()}")
-    # Check if location is valid
+    # -- Check if location is valid
     if location not in LocationType.list_values():
         raise TypeError(f"location should be among {LocationType.list_values()}")
-    # Check if fcover_method is valid
+    # -- Check if fcover_method is valid
     if fcover_method not in MethodType.list_values():
         raise TypeError(f"fcover_method should be among {MethodType.list_values()}")
-    # Check if ls_method is valid
+    # -- Check if ls_method is valid
     if ls_method not in MethodType.list_values():
         raise TypeError(f"ls_method should be among {MethodType.list_values()}")
-    # Check if dem_name is valid
+    # -- Check if dem_name is valid
     if dem_name not in DemType.list_values():
         raise TypeError(f"ls_method should be among {DemType.list_values()}")
 
+    # -- Check if P03 if needed
     if (landcover_name == LandcoverType.P03.value) and (p03_path == None):
         raise TypeError(f"P03_path is needed !")
 
+    # --  Check if other dem path if needed
     if (dem_name == DemType.OTHER.value) and (other_dem_path == None):
         raise TypeError(f"Dem path is needed !")
 
     return
 
 
-def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
+def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> (XDS_TYPE):
     """
     Produce the fcover index
     Args:
@@ -240,47 +241,46 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
         tmp_dir (str) : Temp dir where the cropped Raster will be store
 
     Returns:
-        np.ndarray : ndarray of the fcover raster
-        dict : metadata of the fcover raster
+        XDS_TYPE : xarray of the fcover raster
     """
     arcpy.AddMessage("-- Produce the fcover index --")
 
-    # Read and resample red
+    # -- Read RED
     with rasterio.open(red_path) as red_dst:
         red_xarr = rasters.read(red_dst)
 
-    # Read and resample nir
+    # -- Read NIR
     with rasterio.open(nir_path) as nir_dst:
         nir_xarr = rasters.read(nir_dst)
 
-    # Process ndvi
+    # -- Process NDVI
     ndvi_xarr = _norm_diff(nir_xarr, red_xarr)
 
-    # Reprojet the aoi if needed
+    # -- Re project the AOI if needed
     with rasterio.open(red_path) as raster_dst:
         aoi_gdf = gpd.read_file(aoi_path)
         if aoi_gdf.crs != raster_dst.crs:
             aoi_gdf = aoi_gdf.to_crs(raster_dst.crs)
 
-    # Crop the ndvi with reprojected AOI
+    # -- Crop the NDVI with reprojected AOI
     ndvi_crop_xarr = rasters.crop(ndvi_xarr, aoi_gdf)
 
-    # Write the ndvi cropped
+    # -- Write the NDVI cropped
     ndvi_crop_path = os.path.join(files.to_abspath(tmp_dir), 'ndvi.tif')
     rasters.write(ndvi_crop_xarr, ndvi_crop_path, nodata=0)
 
-    # Extract NDVI min and max inside the AOI
+    # -- Extract NDVI min and max inside the AOI
     ndvi_stat = zonal_stats(aoi_gdf, ndvi_crop_path, stats="min max")
     ndvi_min = ndvi_stat[0]['min']
     ndvi_max = ndvi_stat[0]['max']
 
-    # Fcover calculation
+    # -- Fcover calculation
     fcover_xarr = (ndvi_crop_xarr.astype(np.float32) - ndvi_min) / (ndvi_max - ndvi_min)
 
     return fcover_xarr
 
 
-def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):  # OK
+def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
     """
     Produce C arable index over Europe
     Args:
@@ -317,37 +317,37 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
         'Croatia': 0.25500000000
     }
 
-    # Reproject aoi to wgs84
+    # -- Re project AOI to wgs84
     aoi = gpd.read_file(aoi_path)
     crs_4326 = CRS.from_epsg(4326)
     if aoi.crs != crs_4326:
         aoi = aoi.to_crs(crs_4326)
 
-    # Extract europe countries
+    # -- Extract europe countries
     world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
-    # Initialize arable arr
+    # -- Initialize arable arr
     arable_c_xarr = xr.full_like(raster_xarr, fill_value=0.27)
 
-    # Reproject europe_countries
+    # -- Re project europe_countries
     crs_arable = arable_c_xarr.rio.crs
     if europe_countries.crs != crs_arable:
         europe_countries = europe_countries.to_crs(crs_arable)
 
-    # Update arable_arr with arable_dict
+    # -- Update arable_arr with arable_dict
     for key in list(europe_countries['COUNTRY']):
         geoms = [feature for feature in europe_countries[europe_countries['COUNTRY'] == key]['geometry']]
         arable_c_xarr = rasters.paint(arable_c_xarr, geoms, value=arable_c_dict[key])
 
-    # Mask  result with aoi
+    # -- Mask result with aoi
     arable_c_xarr = rasters.mask(arable_c_xarr, aoi)
 
     return arable_c_xarr
 
 
 def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_name: str) -> (
-        XDS_TYPE):  # NOK
+        XDS_TYPE):
     """
     Produce C index
     Args:
@@ -361,8 +361,8 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     """
     arcpy.AddMessage("-- Produce C index --")
     print(lulc_name)
-    # Identify Cfactor
-    # Cfactor dict and c_arr_arable
+    # --- Identify Cfactor
+    # -- Cfactor dict and c_arr_arable
     if lulc_name == LandcoverStructure.CLC.value:
         cfactor_dict = {
             221: [0.15, 0.45],
@@ -385,10 +385,10 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             334: [0.1, 0.55],
             335: [0, 0]
         }
-        # Produce arable c
+        # -- Produce arable c
         arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
-        c_xarr_arable = rasters.where(lulc_xarr == 211, arable_c_xarr, np.nan)
-    # Global Land Cover - Copernicus 2020 (100m)
+        arable_c_xarr = rasters.where(lulc_xarr == 211, arable_c_xarr, np.nan)
+    # -- Global Land Cover - Copernicus 2020 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
             111: [0.0001, 0.003],
@@ -411,11 +411,11 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             40: [0.07, 0.2],
             70: [0, 0]
         }
-        # Produce arable c
+        # -- Produce arable c
         c_arr_arable = np.where(np.isin(lulc_xarr, [11, 14, 20]), 0.27, np.nan)
-        c_xarr_arable = lulc_xarr.copy(data=c_arr_arable)
+        arable_c_xarr = lulc_xarr.copy(data=c_arr_arable)
 
-    # GlobCover - ESA 2005 (300m)
+    # -- GlobCover - ESA 2005 (300m)
     elif lulc_name == LandcoverStructure.GC.value:
         cfactor_dict = {
             11: [0.07, 0.2],
@@ -439,10 +439,10 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             200: [0, 0],
             220: [0, 0]
         }
-        # Produce arable c
-        c_xarr_arable = rasters.where(lulc_xarr == 40, 0.27, np.nan)
+        # -- Produce arable c
+        arable_c_xarr = rasters.where(lulc_xarr == 40, 0.27, np.nan)
 
-    # GlobeLand30 - China 2020 (30m)
+    # -- GlobeLand30 - China 2020 (30m)
     elif lulc_name == LandcoverStructure.GL.value:
         cfactor_dict = {
             20: [0.00010000000, 0.00250000000],
@@ -452,31 +452,29 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             100: [0.00000000000, 0.00000000000],
             110: [0.10000000000, 0.45000000000]
         }
-        # Produce arable c
-        c_xarr_arable = rasters.where(lulc_xarr == 10, 0.27, np.nan)
+        # -- Produce arable c
+        arable_c_xarr = rasters.where(lulc_xarr == 10, 0.27, np.nan)
 
-    # List init
+    # -- List init
     conditions = []
     choices = []
 
-    # List conditions and choices for C non arable
+    # -- List conditions and choices for C non arable
     for key in cfactor_dict:
         conditions.append(lulc_xarr == key)
         choices.append(cfactor_dict[key][0] + (cfactor_dict[key][1] - cfactor_dict[key][0]) * (
                 1 - fcover_xarr.astype(np.float32)))
 
-    # C non arable calculation
+    # -- C non arable calculation
     c_arr_non_arable = np.select(conditions, choices, default=np.nan)
 
-    # Merge arable and non arable c values
-    c_arr = np.where(np.isnan(c_arr_non_arable), c_xarr_arable, c_arr_non_arable)
+    # -- Merge arable and non arable c values
+    c_arr = np.where(np.isnan(c_arr_non_arable), arable_c_xarr, c_arr_non_arable)
 
-    c_xarr = c_xarr_arable.copy(data=c_arr)
-
-    return c_xarr
+    return arable_c_xarr.copy(data=c_arr)
 
 
-def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
+def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
     """
     Produce the LS factor raster
     Args:
@@ -489,49 +487,49 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
 
     arcpy.AddMessage("-- Produce the LS factor --")
 
-    # Compute D8 flow directions
+    # -- Compute D8 flow directions
     grid = Grid.from_raster(dem_path, data_name='dem')
 
-    # Fill dem
+    # -- Fill dem
     grid.fill_depressions(data='dem', out_name='filled_dem')
 
-    # Resolve flat
+    # -- Resolve flat
     grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
 
-    # Produce dir
+    # -- Produce dir
     grid.flowdir('inflated_dem', out_name='dir')
 
-    # Export flow directions
+    # -- Export flow directions
     dir_path = os.path.join(tmp_dir, 'dir.tif')
     grid.to_raster('dir', dir_path)
 
-    # Extract epsg code of the dem #  A voir si conserve le weight et améliorer cette partie du script
+    # -- Extract epsg code of the dem
     with rasterio.open(dem_path, "r") as dem_dst:
         dem_epsg = str(dem_dst.crs)[-5:]
 
-    # Compute areas of each cell in new projection #  A voir si conserve le weight et améliorer cette partie du script
+    # -- Compute areas of each cell in new projection
     new_crs = pyproj.Proj('+init=epsg:{}'.format(dem_epsg))
     areas = grid.cell_area(as_crs=new_crs, inplace=False)
 
-    # Weight each cell by its relative area
+    # -- Weight each cell by its relative area
     weights = (areas / areas.max()).ravel()
 
-    # Compute accumulation
+    # -- Compute accumulation
     # grid.accumulation(data='dir', out_name='acc')
     grid.accumulation(data='dir', weights=weights, out_name='acc')
 
-    # Export  accumulation
+    # -- Export  accumulation
     acc_path = os.path.join(tmp_dir, 'acc.tif')
     grid.to_raster('acc', acc_path)
 
-    # Extract dem spatial resolution
+    # -- Extract dem spatial resolution
     cellsizex, cellsizey = spatial_resolution(dem_path)
 
-    # Open acc
+    # -- Open acc
     with rasterio.open(acc_path) as acc_dst:
         acc_xarr = rasters.read(acc_dst)
 
-    # Make slope percentage command
+    # -- Make slope percentage command
     slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
     cmd_slope_p = ["gdaldem",
                    "slope",
@@ -539,28 +537,25 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):  # OK
                    strings.to_cmd_string(dem_path),
                    strings.to_cmd_string(slope_dem_p), "-p"]
 
-    # Run command
+    # -- Run command
     misc.run_cli(cmd_slope_p)
 
-    # Open slope p
+    # -- Open slope p
     with rasterio.open(slope_dem_p) as slope_dst:
         slope_p_xarr = rasters.read(slope_dst)
 
-    # m calculation
+    # -- m calculation
     conditions = [slope_p_xarr < 1, (slope_p_xarr >= 1) & (slope_p_xarr > 3), (slope_p_xarr >= 3) & (slope_p_xarr > 5),
                   (slope_p_xarr >= 5) & (slope_p_xarr > 12), slope_p_xarr >= 12]
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
 
-    # Produce ls
-    # Equation 1 : file:///C:/Users/TLEDAU~1/AppData/Local/Temp/Ghosal-DasBhattacharya2020_Article_AReviewOfRUSLEModel.pdf
+    # -- Produce ls
+    # -- Equation 1 : https://www.researchgate.net/publication/338535112_A_Review_of_RUSLE_Model
     ls_arr = (0.065 + 0.0456 * slope_p_xarr + 0.006541 * np.power(slope_p_xarr, 2)) * np.power(
         acc_xarr.astype(np.float32) * cellsizex / 22.13, m)
 
-    # Write ls
-    ls_xarr = slope_p_xarr.copy(data=ls_arr, deep=True)
-
-    return ls_xarr
+    return slope_p_xarr.copy(data=ls_arr, deep=True)
 
 
 def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
@@ -575,26 +570,26 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
 
     arcpy.AddMessage("-- Produce the K index outside Europe --")
 
-    # Read the aoi file
+    # -- Read the aoi file
     aoi_gdf = gpd.read_file(aoi_path)
 
-    # Crop hwsd
+    # -- Crop hwsd
     crop_hwsd_xarr = rasters.crop(HWSD_PATH, aoi_gdf)
 
-    # Extract soil information from ce access DB
+    # -- Extract soil information from ce access DB
     conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + DBFILE_PATH + ';')
     cursor = conn.cursor()
     cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE, DRAINAGE FROM HWSD_DATA')
 
-    # Dictionaries that store the link between the RUSLE codes (P16 methodo) and the HWSD DB codes
-    # Key = TEXTURE(HWSD), value = b
+    # -- Dictionaries that store the link between the RUSLE codes (P16 methodo) and the HWSD DB codes
+    # -- Key = TEXTURE(HWSD), value = b
     b_dict = {
         0: np.nan,
         1: 4,
         2: 3,
         3: 2
     }
-    # Key = DRAINAGE(HWSD), value = c
+    # -- Key = DRAINAGE(HWSD), value = c
     c_dict = {
         1: 6,
         2: 5,
@@ -605,46 +600,46 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
         7: 1
     }
 
-    # K calculation for each type of values
+    # -- K calculation for each type of values
     k_dict = {}
     for row in cursor.fetchall():
         if None in [row[1], row[2], row[3], row[4], row[5]]:
             k = np.nan
         else:
-            # Silt (%) –silt fraction content (0.002 –0.05 mm)
+            # -- Silt (%) –silt fraction content (0.002 –0.05 mm)
             s_silt = row[1]
-            # Clay (%) –clay fraction content (<0.002 mm)
+            # -- Clay (%) –clay fraction content (<0.002 mm)
             s_clay = row[2]
-            # Sand (%) –sand fraction content (0.05 –2mm)
+            # -- Sand (%) –sand fraction content (0.05 –2mm)
             s_sand = row[3]
-            # Organic matter (%)
+            # -- Organic matter (%)
             a = row[4] * 1.724
-            # Soil structure code used in soil classification
+            # -- Soil structure code used in soil classification
             b = b_dict[row[5]]
-            # Profile permeability class
+            # -- Profile permeability class
             c = c_dict[row[6]]
 
-            # VFS (%) –very fine sand fraction content (0.05 –0.1 mm)
+            # -- VFS (%) –very fine sand fraction content (0.05 –0.1 mm)
             vfs = (0.74 - (0.62 * s_sand / 100)) * s_sand
 
-            # Textural factor
+            # -- Textural factor
             m = (s_silt + vfs) * (100 - s_clay)
 
-            # K (Soil erodibility factor)
+            # -- K (Soil erodibility factor)
             k = ((2.1 * (m ** 1.14) * (10 ** -4) * (12 - a)) + (3.25 * (b - 2)) + (2.5 * (c - 3))) / 100
 
-        # Add value in the dictionary
+        # -- Add value in the dictionary
         k_dict[row[0]] = k
 
     conditions = []
     choices = []
 
-    # List conditions and choices for C non arable
+    # -- List conditions and choices for C non arable
     for key in k_dict:
         conditions.append(crop_hwsd_xarr == key)
         choices.append(k_dict[key])
 
-    # Update arr with k values
+    # -- Update arr with k values
     k_arr = np.select(conditions, choices, default=np.nan)
 
     return crop_hwsd_xarr.copy(data=k_arr, deep=True)
@@ -654,10 +649,10 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     """
     A faire
     Args:
-        input_dict (dict) :
+        input_dict (dict) : Dict that store parameters values
 
     Returns:
-        dict :
+        dict : Dict that store raster to pre process and resampling method
     """
 
     # --- Extract parameters ---
@@ -673,12 +668,12 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     ls_path = input_dict.get("ls_path")
     output_dir = input_dict.get("output_dir")
 
-    # Create temp_dir if not exist
+    # -- Create temp_dir if not exist
     tmp_dir = os.path.join(output_dir, "temp_dir")
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-    # Dict that store landcover name, landcover path and landcover label
+    # -- Dict that store landcover name and landcover path
     landcover_path_dict = {LandcoverType.CLC.value: CLC_PATH,
                            LandcoverType.GLC.value: GLC_PATH,
                            LandcoverType.GC.value: GC_PATH,
@@ -686,23 +681,24 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
                            LandcoverType.P03.value: p03_path
                            }
 
-    # Store landcover path in a variable
+    # -- Store landcover path in a variable
     lulc_path = landcover_path_dict[landcover_name]
 
+    # -- Check location
     if location == LocationType.EUROPE.value:
 
-        # Dict that store raster to pre_process and the type of resampling
+        # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
                        "k": [K_EURO_PATH, Resampling.bilinear],
                        "lulc": [lulc_path, Resampling.nearest],
                        "p": [P_EURO_PATH, Resampling.bilinear]
                        }
 
-        # Add the ls raster to the pre process dict if provided
+        # -- Add the ls raster to the pre process dict if provided
         if ls_method == MethodType.ALREADY_PROVIDED.value:
             raster_dict["ls"] = [ls_path, Resampling.bilinear]
 
-        # Add bands to the pre process dict if fcover need to be calculated or not
+        # -- Add bands to the pre process dict if fcover need to be calculated or not
         if fcover_method == MethodType.TO_BE_CALCULATED.value:
             raster_dict["red"] = [red_path, Resampling.bilinear]
             raster_dict["nir"] = [nir_path, Resampling.bilinear]
@@ -711,23 +707,23 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
     elif location == LocationType.GLOBAL.value:
 
-        # Produce k
+        # -- Produce k
         k_xarr = produce_k_outside_europe(aoi_path)
-        # Write k raster
+        # -- Write k raster
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
         rasters.write(k_xarr, k_path, nodata=0)
 
-        # Dict that store raster to pre_process and the type of resampling
+        # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
                        "lulc": [lulc_path, Resampling.nearest],
                        "k": [k_path, Resampling.nearest]
                        }
 
-        # Add the ls raster to the pre process dict if provided
+        # -- Add the ls raster to the pre process dict if provided
         if ls_method == MethodType.ALREADY_PROVIDED.value:
             raster_dict["ls"] = [ls_path, Resampling.bilinear]
 
-        # Add bands to the pre process dict if fcover need to be calculated or not
+        # -- Add bands to the pre process dict if fcover need to be calculated or not
         if fcover_method == MethodType.TO_BE_CALCULATED.value:
             raster_dict["red"] = [red_path, Resampling.bilinear]
             raster_dict["nir"] = [nir_path, Resampling.bilinear]
@@ -738,7 +734,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
 
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
-                          tmp_dir: str) -> dict:  # OK
+                          tmp_dir: str) -> dict:
     """
     Pre process a list of raster (clip, reproj, collocate)
     Args:
@@ -754,54 +750,54 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     arcpy.AddMessage("-- RASTER PRE PROCESSING --")
     out_dict = {}
 
-    # Loop on path into the dict
+    # -- Loop on path into the dict
     for i, key in enumerate(raster_path_dict):
 
         arcpy.AddMessage('********* {} ********'.format(key))
-        # Store raster path
+        # -- Store raster path
         raster_path = raster_path_dict[key][0]
 
-        # Crop raster
+        # -- Crop raster
         aoi_gdf = gpd.read_file(aoi_path)
         raster_crop_xarr = rasters.crop(raster_path, aoi_gdf, from_disk=True)
 
-        # Store resampling method
+        # -- Store resampling method
         resampling_method = raster_path_dict[key][1]
 
-        # Add path to the dictionary
+        # -- Add path to the dictionary
         if i == 0:
 
-            # Reproject raster and resample
+            # -- Re project raster and resample
             raster_reproj_xarr = raster_crop_xarr.rio.reproject(dst_crs, resolution=dst_resolution,
                                                                 resampling=resampling_method)
 
-            # Re crop raster with AOI
+            # -- Re crop raster with AOI
             raster_recrop_xarr = rasters.crop(raster_reproj_xarr, aoi_gdf, from_disk=True)
 
-            # Write masked raster
+            # -- Write masked raster
             raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
             rasters.write(raster_recrop_xarr, raster_path, nodata=0)
 
-            # Store path result in a dict
+            # -- Store path result in a dict
             out_dict[key] = raster_path
 
-            # Copy the reference xarray
+            # -- Copy the reference xarray
             ref_xarr = raster_recrop_xarr.copy()
 
         else:
 
-            # Collocate raster
-            arcpy.AddMessage('Collocate')
+            # -- Collocate raster
+            # arcpy.AddMessage('Collocate')
             raster_collocate_xarr = rasters.collocate(ref_xarr, raster_crop_xarr, resampling_method)
 
-            # Mask raster with AOI
+            # -- Mask raster with AOI
             raster_masked_xarr = rasters.mask(raster_collocate_xarr, aoi_gdf)
 
-            # Write masked raster
+            # -- Write masked raster
             raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
             rasters.write(raster_masked_xarr, raster_path, nodata=0)
 
-            # Store path result in a dict
+            # -- Store path result in a dict
             out_dict[key] = raster_path
 
     return out_dict
@@ -838,12 +834,12 @@ def produce_a_reclass_arr(a_xarr: np.ndarray) -> (XDS_TYPE):
 
     arcpy.AddMessage("-- Produce the reclassed a --")
 
-    # List conditions and choices
+    # -- List conditions and choices
     conditions = [(a_xarr < 6.7), (a_xarr >= 6.7) & (a_xarr < 11.2), (a_xarr >= 11.2) & (a_xarr < 22.4),
                   (a_xarr >= 22.4) & (a_xarr < 33.6), (a_xarr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
-    # Update arr with k values
+    # -- Update arr with k values
     a_reclass_arr = np.select(conditions, choices, default=np.nan)
 
     return a_xarr.copy(data=a_reclass_arr)
@@ -866,7 +862,7 @@ def produce_rusle(input_dict: dict) -> None:
     landcover_name = input_dict.get("landcover_name")
     del_path = input_dict.get("del_path")
     ls_method = input_dict.get("ls_method")
-    ls_path = input_dict.get("ls_path")
+    # ls_path = input_dict.get("ls_path")
     dem_name = input_dict.get("dem_name")
     other_dem_path = input_dict.get("other_dem_path")
     output_resolution = input_dict.get("output_resolution")
@@ -885,18 +881,18 @@ def produce_rusle(input_dict: dict) -> None:
     raster_dict = make_raster_list_to_pre_process(input_dict)
 
     # --- Pre-process raster ---
-    # Extract the epsg code from the reference system parameter and made the CRS
+    # -- Extract the epsg code from the reference system parameter and made the CRS
     ref_epsg = epsg_from_arcgis_proj(ref_system)
     ref_crs = CRS.from_epsg(ref_epsg)
-    # Run pre process
+    # -- Run pre process
     post_process_dict = raster_pre_processing(aoi_path, output_resolution, CRS.from_epsg(ref_epsg), raster_dict,
                                               tmp_dir)
-    # AOI to gdf
+    # -- AOI to gdf
     aoi_gdf = gpd.read_file(aoi_path)
 
-    # Check if ls need to be calculated or not
+    # -- Check if ls need to be calculated or not
     if ls_method == MethodType.TO_BE_CALCULATED.value:
-        # Dict that store dem_name with path
+        # -- Dict that store dem_name with path
         dem_dict = {DemType.EUDEM.value: EUDEM_PATH,
                     DemType.SRTM.value: SRTM30_PATH,
                     DemType.MERIT.value: MERIT_PATH,
@@ -904,36 +900,36 @@ def produce_rusle(input_dict: dict) -> None:
                     }
 
         # --- Pre-process the DEM ---
-        # Extract DEM path
+        # -- Extract DEM path
         dem_path = dem_dict[dem_name]
-        # Crop DEM
+        # -- Crop DEM
         dem_crop_xarr = rasters.crop(dem_path, aoi_gdf, from_disk=True)
-        # Reproj DEM
+        # -- Reproj DEM
         dem_reproj_xarr = dem_crop_xarr.rio.reproject(ref_crs, resampling=Resampling.bilinear)
-        # Write reproj DEM
+        # --- Write reproj DEM
         dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
         rasters.write(dem_reproj_xarr, dem_reproj_path, nodata=0)
 
         # --- Produce ls ---
         ls_raw_xarr = produce_ls_factor(dem_reproj_path, tmp_dir)
-        # Collocate ls with the other results
+        # -- Collocate ls with the other results
         ls_xarr = rasters.collocate(rasters.read(post_process_dict[list(post_process_dict.keys())[0]]), ls_raw_xarr,
                                     Resampling.bilinear)
-        # Write ls
+        # -- Write ls
         ls_path = os.path.join(tmp_dir, "ls.tif")
         rasters.write(ls_xarr, ls_path, nodata=0)
     else:
         with rasterio.open(post_process_dict['ls']) as ls_dst:
             ls_xarr = rasters.read(ls_dst)
 
-    # Check if fcover need to be calculated or not
+    # -- Check if fcover need to be calculated or not
     if fcover_method == MethodType.TO_BE_CALCULATED.value:
-        # Process fcover
+        # -- Process fcover
         red_process_path = post_process_dict["red"]
         nir_process_path = post_process_dict["nir"]
         fcover_xarr = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir)
 
-        # Write fcover
+        # -- Write fcover
         fcover_path = os.path.join(tmp_dir, "fcover.tif")
         rasters.write(fcover_xarr, fcover_path, nodata=0)
 
@@ -941,70 +937,69 @@ def produce_rusle(input_dict: dict) -> None:
         with rasterio.open(post_process_dict["fcover"]) as fcover_dst:
             fcover_xarr = rasters.read(fcover_dst)
 
-    # Mask lulc if del
+    # -- Mask lulc if del
     if del_path:
 
-        # Update the lulc with the DEL
+        # -- Update the lulc with the DEL
         arcpy.AddMessage("-- Update raster values covered by DEL --")
 
-        # DEM to gdf
+        # -- DEM to gdf
         del_gdf = gpd.read_file(del_path)
 
+        # -- Update the lulc with the del
         lulc_process_path = post_process_dict["lulc"]
-
-        # Update the lulc with the del
         lulc_del_xarr = rasters.paint(lulc_process_path, del_gdf, value=334)
 
-        # Write the lulc with fire
+        # -- Write the lulc with fire
         lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
         rasters.write(lulc_del_xarr, lulc_masked_path, nodata=0)
 
         lulc_xarr = lulc_del_xarr.copy()
 
     else:
-        # Open the lulc raster
+        # -- Open the lulc raster
         with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
             lulc_xarr = rasters.read(lulc_dst)
 
-    # Process C
+    # -- Process C
     c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
 
-    # Write c raster
+    # -- Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
     rasters.write(c_xarr, c_out, nodata=0)
 
-    # Produce p if location is GLOBAL
+    # -- Produce p if location is GLOBAL
     if location == LocationType.GLOBAL.value:
-        # Produce p
+        # -- Produce p
         p_value = 1  # Can change
         p_xarr = xr.full_like(c_xarr, fill_value=p_value)
 
-        # Write p
+        # -- Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_xarr, p_path, nodata=0)
     elif location == LocationType.EUROPE.value:
         with rasterio.open(post_process_dict["p"]) as p_dst:
             p_xarr = rasters.read(p_dst)
 
-    # Open r
+    # -- Open r
     with rasterio.open(post_process_dict["r"]) as r_dst:
         r_xarr = rasters.read(r_dst)
 
-    # Open k
+    # -- Open k
     with rasterio.open(post_process_dict["k"]) as k_dst:
         k_xarr = rasters.read(k_dst)
 
-    # Produce a with RUSLE model
+    # -- Produce a with RUSLE model
     a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
 
-    # Write the a raster
+    # -- Write the a raster
     a_path = os.path.join(output_dir, "a_rusle.tif")
     rasters.write(a_xarr, a_path, nodata=0)
 
-    # Reclass a (Probleme avec le reclass des Na. A revoir !!)
+    # -- Reclass a
     a_reclas_xarr = produce_a_reclass_arr(a_xarr)
 
-    # Write the a raster
+    # -- Write the a raster
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
     rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
 
@@ -1030,41 +1025,41 @@ if __name__ == '__main__':
 
     # --- Parameters ---
     # Load inputs
-    # input_dict = {
-    #     "aoi_path": str(arcpy.GetParameterAsText(0)),
-    #     "location": str(arcpy.GetParameterAsText(1)),
-    #     "fcover_method": str(arcpy.GetParameterAsText(2)),
-    #     "fcover_path": str(arcpy.GetParameterAsText(3)),
-    #     "nir_path": str(arcpy.GetParameterAsText(4)),
-    #     "red_path": str(arcpy.GetParameterAsText(5)),
-    #     "landcover_name": str(arcpy.GetParameterAsText(6)),
-    #     "p03_path": str(arcpy.GetParameterAsText(7)),
-    #     "del_path": str(arcpy.GetParameterAsText(8)),
-    #     "ls_method": str(arcpy.GetParameterAsText(9)),
-    #     "ls_path": str(arcpy.GetParameterAsText(10)),
-    #     "dem_name": str(arcpy.GetParameterAsText(11)),
-    #     "other_dem_path": str(arcpy.GetParameterAsText(12)),
-    #     "output_resolution": int(str(arcpy.GetParameterAsText(13))),
-    #     "ref_system": arcpy.GetParameterAsText(14),
-    #     "output_dir": str(arcpy.GetParameterAsText(15))}
-
     input_dict = {
-        "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
-        "location": "Global",
-        "fcover_method": "To be calculated",
-        "fcover_path": None,
-        "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
-        "red_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2",
-        "landcover_name": "Corine Land Cover - 2018 (100m)",
-        "p03_path": None,
-        "del_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_del_32631.shp",
-        "ls_method": "To be calculated",
-        "ls_path": None,
-        "dem_name": "EUDEM 25m",
-        "other_dem_path": None,
-        "output_resolution": int(10),
-        "ref_system": "PROJCS['WGS_1984_UTM_Zone_31N',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Transverse_Mercator'],PARAMETER['False_Easting',500000.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',3.0],PARAMETER['Scale_Factor',0.9996],PARAMETER['Latitude_Of_Origin',0.0],UNIT['Meter',1.0]]",
-        "output_dir": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSN073_output"}
+        "aoi_path": str(arcpy.GetParameterAsText(0)),
+        "location": str(arcpy.GetParameterAsText(1)),
+        "fcover_method": str(arcpy.GetParameterAsText(2)),
+        "fcover_path": str(arcpy.GetParameterAsText(3)),
+        "nir_path": str(arcpy.GetParameterAsText(4)),
+        "red_path": str(arcpy.GetParameterAsText(5)),
+        "landcover_name": str(arcpy.GetParameterAsText(6)),
+        "p03_path": str(arcpy.GetParameterAsText(7)),
+        "del_path": str(arcpy.GetParameterAsText(8)),
+        "ls_method": str(arcpy.GetParameterAsText(9)),
+        "ls_path": str(arcpy.GetParameterAsText(10)),
+        "dem_name": str(arcpy.GetParameterAsText(11)),
+        "other_dem_path": str(arcpy.GetParameterAsText(12)),
+        "output_resolution": int(str(arcpy.GetParameterAsText(13))),
+        "ref_system": arcpy.GetParameterAsText(14),
+        "output_dir": str(arcpy.GetParameterAsText(15))}
+
+    # input_dict = {
+    #     "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
+    #     "location": "Europe",
+    #     "fcover_method": "To be calculated",
+    #     "fcover_path": None,
+    #     "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
+    #     "red_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2",
+    #     "landcover_name": "Corine Land Cover - 2018 (100m)",
+    #     "p03_path": None,
+    #     "del_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_del_32631.shp",
+    #     "ls_method": "To be calculated",
+    #     "ls_path": None,
+    #     "dem_name": "EUDEM 25m",
+    #     "other_dem_path": None,
+    #     "output_resolution": int(10),
+    #     "ref_system": "PROJCS['WGS_1984_UTM_Zone_31N',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Transverse_Mercator'],PARAMETER['False_Easting',500000.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',3.0],PARAMETER['Scale_Factor',0.9996],PARAMETER['Latitude_Of_Origin',0.0],UNIT['Meter',1.0]]",
+    #     "output_dir": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSN073_output"}
     try:
         # Compute raster RUSLE
         produce_rusle(input_dict)
