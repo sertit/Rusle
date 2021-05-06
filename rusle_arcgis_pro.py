@@ -42,26 +42,32 @@ np.seterr(divide='ignore', invalid='ignore')
 DEBUG = False
 LOGGER = logging.getLogger("RUSLE")
 
-WORLD_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\world_countries_poly.shp"
-EUROPE_COUNTRIES_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\World_countries_poly\europe_countries_poly.shp"
-HWSD_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\hwsd.tif"
-DBFILE_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\FAO_Harmonized_World_Soil_Database\HWSD.mdb"
+GLOBAL_DIR = os.path.join(r"\\ds2", "database02", "BASES_DE_DONNEES", "GLOBAL")
+WORLD_COUNTRIES_PATH = os.path.join(GLOBAL_DIR, "World_countries_poly", "world_countries_poly.shp")
+EUROPE_COUNTRIES_PATH = os.path.join(GLOBAL_DIR, "World_countries_poly", "europe_countries_poly.shp")
 
-R_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Rfactor\Rf_gp1.tif"
-K_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Kfactor\K_new_crop.tif"
-LS_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\LS_100m\EU_LS_Mosaic_100m.tif"
-P_EURO_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\European_Soil_Database_v2\Pfactor\EU_PFactor_V2.tif"
+HWSD_PATH = os.path.join(GLOBAL_DIR, "FAO_Harmonized_World_Soil_Database", "hwsd.tif")
+DBFILE_PATH = os.path.join(GLOBAL_DIR, "FAO_Harmonized_World_Soil_Database", "HWSD.mdb")
 
-CLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Corine_Land_Cover\CLC_2018\clc2018_clc2018_v2018_20_raster100m\CLC2018_CLC2018_V2018_20.tif"
-R_GLOBAL_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Rainfall_Erosivity\GlobalR_NoPol.tif"
+R_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Rfactor", "Rf_gp1.tif")
 
-GLC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Global_Land_Cover\2019\PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
-GC_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\Globcover_2009\Globcover2009_V2.3_Global_\GLOBCOVER_L4_200901_200912_V2.3.tif"
-GL_PATH = ""  # A ajouter
+K_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Kfactor", "K_new_crop.tif")
+LS_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "LS_100m", "EU_LS_Mosaic_100m.tif")
+P_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Pfactor", "EU_PFactor_V2.tif")
 
-EUDEM_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\EUDEM_v2\eudem_dem_3035_europe.tif"
-SRTM30_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\SRTM_30m_v4\index.vrt"
-MERIT_PATH = r"\\ds2\database02\BASES_DE_DONNEES\GLOBAL\MERIT_Hydrologically_Adjusted_Elevations\MERIT_DEM.vrt"
+CLC_PATH = os.path.join(GLOBAL_DIR, "Corine_Land_Cover", "CLC_2018", "clc2018_clc2018_v2018_20_raster100m",
+                        "CLC2018_CLC2018_V2018_20.tif")
+R_GLOBAL_PATH = os.path.join(GLOBAL_DIR, "Global_Rainfall_Erosivity", "GlobalR_NoPol.tif")
+
+GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2019",
+                        "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif")
+GC_PATH = os.path.join(GLOBAL_DIR, "Globcover_2009", "Globcover2009_V2.3_Global_",
+                       "GLOBCOVER_L4_200901_200912_V2.3.tif")
+GL_PATH = ""  # To add
+
+EUDEM_PATH = os.path.join(GLOBAL_DIR, "EUDEM_v2", "eudem_dem_3035_europe.tif")
+SRTM30_PATH = os.path.join(GLOBAL_DIR, "SRTM_30m_v4", "index.vrt")
+MERIT_PATH = os.path.join(GLOBAL_DIR, "MERIT_Hydrologically_Adjusted_Elevations", "MERIT_DEM.vrt")
 
 speedups.disable()
 
@@ -650,7 +656,7 @@ def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
 
 def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     """
-    TODO
+    Make a dict with th raster to pre process from the input dict
     Args:
         input_dict (dict) : Dict that store parameters values
 
@@ -860,7 +866,7 @@ def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
 
 def produce_rusle(input_dict: dict) -> None:
     """
-    TODO
+    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
 
     Args:
         input_dict (dict) : Input dict containing all needed values
@@ -1058,23 +1064,6 @@ if __name__ == '__main__':
         "ref_system": arcpy.GetParameterAsText(14),
         "output_dir": str(arcpy.GetParameterAsText(15))}
 
-    # input_dict = {
-    #     "aoi_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_aoi_32631.shp",
-    #     "location": "Europe",
-    #     "fcover_method": "To be calculated",
-    #     "fcover_path": None,
-    #     "nir_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B08_10m.jp2",
-    #     "red_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609\S2A_MSIL2A_20200805T104031_N0214_R008_T31TDH_20200805T112609.SAFE\GRANULE\L2A_T31TDH_A026746_20200805T104810\IMG_DATA\R10m\T31TDH_20200805T104031_B04_10m.jp2",
-    #     "landcover_name": "Corine Land Cover - 2018 (100m)",
-    #     "p03_path": None,
-    #     "del_path": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\emsn073_del_32631.shp",
-    #     "ls_method": "To be calculated",
-    #     "ls_path": None,
-    #     "dem_name": "EUDEM 25m",
-    #     "other_dem_path": None,
-    #     "output_resolution": int(10),
-    #     "ref_system": "PROJCS['WGS_1984_UTM_Zone_31N',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Transverse_Mercator'],PARAMETER['False_Easting',500000.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',3.0],PARAMETER['Scale_Factor',0.9996],PARAMETER['Latitude_Of_Origin',0.0],UNIT['Meter',1.0]]",
-    #     "output_dir": r"D:\TLedauphin\02_Temp_traitement\Test_rusle\EMSN073_output"}
     try:
         # Compute raster RUSLE
         produce_rusle(input_dict)
