@@ -249,7 +249,7 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
     Returns:
         XDS_TYPE : xarray of the fcover raster
     """
-    arcpy.AddMessage("-- Produce the fcover index --")
+    LOGGER.info("-- Produce the fcover index --")
 
     # -- Read RED
     red_xarr = rasters.read(red_path).astype(np.float32)  # No need to normalize, only used in NDVI
@@ -295,7 +295,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> XDS_TYPE:
         XDS_TYPE : xarray of the c arable raster
     """
 
-    arcpy.AddMessage("-- Produce C arable index over Europe --")
+    LOGGER.info("-- Produce C arable index over Europe --")
 
     arable_c_dict = {
         "Finland": 0.231,
@@ -362,7 +362,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     Returns:
         XDS_TYPE : xdarray of the c index raster
     """
-    arcpy.AddMessage("-- Produce C index --")
+    LOGGER.info("-- Produce C index --")
     print(lulc_name)
     # --- Identify Cfactor
     # -- Cfactor dict and c_arr_arable
@@ -489,7 +489,7 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
         XDS_TYPE : xarray of the ls factor raster
     """
 
-    arcpy.AddMessage("-- Produce the LS factor --")
+    LOGGER.info("-- Produce the LS factor --")
 
     # -- Compute D8 flow directions
     grid = Grid.from_raster(dem_path, data_name='dem')
@@ -571,7 +571,7 @@ def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
         XDS_TYPE : xarray of the K raster
     """
 
-    arcpy.AddMessage("-- Produce the K index outside Europe --")
+    LOGGER.info("-- Produce the K index outside Europe --")
 
     # -- Read the aoi file
     aoi_gdf = gpd.read_file(aoi_path)
@@ -752,14 +752,14 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
     Returns:
         dict : dictionary that store the list of pre process raster (key = alias : value : raster path)
     """
-    arcpy.AddMessage("-- RASTER PRE PROCESSING --")
+    LOGGER.info("-- RASTER PRE PROCESSING --")
     out_dict = {}
 
     # -- Loop on path into the dict
     ref_xarr = None
     for i, key in enumerate(raster_path_dict):
 
-        arcpy.AddMessage('********* {} ********'.format(key))
+        LOGGER.info('********* {} ********'.format(key))
         # -- Store raster path
         raster_path = raster_path_dict[key][0]
 
@@ -793,7 +793,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
         else:
 
             # -- Collocate raster
-            # arcpy.AddMessage('Collocate')
+            # LOGGER.info('Collocate')
             raster_collocate_xarr = rasters.collocate(ref_xarr, raster_crop_xarr, resampling_method)
 
             # -- Mask raster with AOI
@@ -826,7 +826,7 @@ def produce_a_arr(r_xarr: XDS_TYPE,
     Returns:
         XDS_TYPE : xarray of the average annual soil loss (ton/ha/year)
     """
-    arcpy.AddMessage("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
+    LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
     return r_xarr * k_xarr * ls_xarr * c_xarr * p_xarr
 
@@ -841,7 +841,7 @@ def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
         XDS_TYPE : xarray of the reclassified a raster
     """
 
-    arcpy.AddMessage("-- Produce the reclassified a --")
+    LOGGER.info("-- Produce the reclassified a --")
 
     # -- List conditions and choices
     a_arr = a_xarr.data
@@ -961,7 +961,7 @@ def produce_rusle(input_dict: dict) -> None:
     # -- Mask lulc if del
     if del_path:
         # -- Update the lulc with the DEL
-        arcpy.AddMessage("-- Update raster values covered by DEL --")
+        LOGGER.info("-- Update raster values covered by DEL --")
 
         # -- DEM to gdf
         del_gdf = gpd.read_file(del_path)
@@ -1079,7 +1079,7 @@ if __name__ == '__main__':
         # Compute raster RUSLE
         produce_rusle(input_dict)
 
-        arcpy.AddMessage('RUSLE was a success.')
+        LOGGER.info('RUSLE was a success.')
 
         # Add to the current map if exist
         # arcpy.MakeRasterLayer_management(input_dict["output_dir"])
