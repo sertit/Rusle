@@ -3,11 +3,11 @@ Processing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 """
 
-__author__ = "Ledauphin Thomas"
+__author__ = "Ledauphin Thomas, Rémi BRAUN"
 __contact__ = "tledauphin@unistra.fr"
-__python__ = "3.5.0"
+__python__ = "3.7.0"
 __created__ = "24/02/2021"
-__update__ = "05/05/2021"
+__update__ = "06/05/2021"
 __copyrights__ = "(c) SERTIT 2021"
 
 import os
@@ -18,12 +18,11 @@ import numpy as np
 import xarray as xr
 import rasterio
 from rasterio.crs import CRS
-import geopandas as gpd
 from rasterio.enums import Resampling
+import geopandas as gpd
 from rasterstats import zonal_stats
 
-from sertit import strings, misc, rasters, files, logs
-from eoreader.bands.index import _norm_diff
+from sertit import strings, misc, rasters, files
 from sertit.misc import ListEnum
 from sertit.rasters import XDS_TYPE
 
@@ -148,31 +147,14 @@ class LandcoverStructure(ListEnum):
     P03 = "Corine Land Cover - 2018 (100m)"
 
 
-def spatial_resolution(raster_path: str) -> (float, float):
-    """
-    Extract the spatial resolution of a raster X, Y
-    Args:
-        raster_path (str) : raster path
-
-    Returns:
-    float : X resolution
-    float :Y resolution
-    """
-    raster = rasterio.open(raster_path)
-    t = raster.transform
-    x = t[0]
-    y = -t[4]
-    return x, y
-
-
-def epsg_from_arcgis_proj(arcgis_proj) -> None:
+def epsg_from_arcgis_proj(arcgis_proj):
     """
     Extract espg code from arcgis proj
     Args:
         arcgis_proj () : Arcgis proj
 
     Returns:
-        epsg_code : ndarray of the reclassed a raster
+        epsg_code : ndarray of the reclassified a raster
     """
     sr = arcpy.SpatialReference()
     sr.loadFromString(arcgis_proj)
@@ -206,39 +188,63 @@ def check_parameters(input_dict: dict) -> None:
 
     # -- Check if landcover_name is valid
     if landcover_name not in LandcoverType.list_values():
-        raise TypeError(f"landcover_name should be among {LandcoverType.list_values()}")
+        raise ValueError(f"landcover_name should be among {LandcoverType.list_values()}")
     # -- Check if location is valid
     if location not in LocationType.list_values():
-        raise TypeError(f"location should be among {LocationType.list_values()}")
+        raise ValueError(f"location should be among {LocationType.list_values()}")
     # -- Check if fcover_method is valid
     if fcover_method not in MethodType.list_values():
-        raise TypeError(f"fcover_method should be among {MethodType.list_values()}")
+        raise ValueError(f"fcover_method should be among {MethodType.list_values()}")
     # -- Check if ls_method is valid
     if ls_method not in MethodType.list_values():
-        raise TypeError(f"ls_method should be among {MethodType.list_values()}")
+        raise ValueError(f"ls_method should be among {MethodType.list_values()}")
     # -- Check if dem_name is valid
     if dem_name not in DemType.list_values():
-        raise TypeError(f"ls_method should be among {DemType.list_values()}")
+        raise ValueError(f"ls_method should be among {DemType.list_values()}")
 
     # -- Check if P03 if needed
-    if (landcover_name == LandcoverType.P03.value) and (p03_path == None):
-        raise TypeError(f"P03_path is needed !")
+    if (landcover_name == LandcoverType.P03.value) and (p03_path is None):
+        raise ValueError(f"P03_path is needed !")
 
     # --  Check if other dem path if needed
-    if (dem_name == DemType.OTHER.value) and (other_dem_path == None):
-        raise TypeError(f"Dem path is needed !")
+    if (dem_name == DemType.OTHER.value) and (other_dem_path is None):
+        raise ValueError(f"Dem path is needed !")
 
     return
 
 
-def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> (XDS_TYPE):
+def norm_diff(xarr_1: XDS_TYPE, xarr_2: XDS_TYPE, new_name: str = "") -> XDS_TYPE:
+    """
+    Normalized difference
+
+    Args:
+        xarr_1 (XDS_TYPE): xarray of band 1
+        xarr_2 (XDS_TYPE): xarray of band 2
+        new_name (str): new name
+
+    Returns:
+        XDS_TYPE: Normalized difference of the two bands with a new name
+    """
+    # Get data as np arrays
+    band_1 = xarr_1.data
+    band_2 = xarr_2.data
+
+    # Compute the normalized difference
+    norm = np.divide(band_1 - band_2, band_1 + band_2)
+
+    # Create back a xarray with the proper data
+    norm_xda = xarr_1.copy(data=norm)
+    return rasters.set_metadata(norm_xda, norm_xda, new_name=new_name)
+
+
+def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> XDS_TYPE:
     """
     Produce the fcover index
     Args:
         red_path (str): Red band path
         nir_path (str): nir band path
         aoi_path (str): AOI path
-        tmp_dir (str) : Temp dir where the cropped Raster will be store
+        tmp_dir (str) : Temp dir where the cropped Raster will be stored
 
     Returns:
         XDS_TYPE : xarray of the fcover raster
@@ -246,21 +252,18 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
     arcpy.AddMessage("-- Produce the fcover index --")
 
     # -- Read RED
-    with rasterio.open(red_path) as red_dst:
-        red_xarr = rasters.read(red_dst)
+    red_xarr = rasters.read(red_path).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Read NIR
-    with rasterio.open(nir_path) as nir_dst:
-        nir_xarr = rasters.read(nir_dst)
+    nir_xarr = rasters.read(nir_path).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Process NDVI
-    ndvi_xarr = _norm_diff(nir_xarr, red_xarr)
+    ndvi_xarr = norm_diff(nir_xarr, red_xarr, new_name="NDVI")
 
     # -- Re project the AOI if needed
-    with rasterio.open(red_path) as raster_dst:
-        aoi_gdf = gpd.read_file(aoi_path)
-        if aoi_gdf.crs != raster_dst.crs:
-            aoi_gdf = aoi_gdf.to_crs(raster_dst.crs)
+    aoi_gdf = gpd.read_file(aoi_path)
+    if aoi_gdf.crs != red_xarr.rio.crs:
+        aoi_gdf = aoi_gdf.to_crs(red_xarr.rio.crs)
 
     # -- Crop the NDVI with reprojected AOI
     ndvi_crop_xarr = rasters.crop(ndvi_xarr, aoi_gdf)
@@ -275,12 +278,13 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
     ndvi_max = ndvi_stat[0]['max']
 
     # -- Fcover calculation
-    fcover_xarr = (ndvi_crop_xarr.astype(np.float32) - ndvi_min) / (ndvi_max - ndvi_min)
+    fcover_xarr = (ndvi_crop_xarr - ndvi_min) / (ndvi_max - ndvi_min)
+    fcover_xarr = rasters.set_metadata(fcover_xarr, ndvi_crop_xarr, new_name="FCover")
 
     return fcover_xarr
 
 
-def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
+def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> XDS_TYPE:
     """
     Produce C arable index over Europe
     Args:
@@ -346,13 +350,12 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> (XDS_TYPE):
     return arable_c_xarr
 
 
-def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_name: str) -> (
-        XDS_TYPE):
+def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_name: str) -> XDS_TYPE:
     """
     Produce C index
     Args:
         lulc_xarr (XDS_TYPE): lulc xarray
-        fcover_xarr (XDS_TYPE) :fcover xarray
+        fcover_xarr (XDS_TYPE):fcover xarray
         aoi_path (str): aoi path
         lulc_name (str) : name of the LULC
 
@@ -412,8 +415,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             70: [0, 0]
         }
         # -- Produce arable c
-        c_arr_arable = np.where(np.isin(lulc_xarr, [11, 14, 20]), 0.27, np.nan)
-        arable_c_xarr = lulc_xarr.copy(data=c_arr_arable)
+        arable_c_xarr = rasters.where(np.isin(lulc_xarr, [11, 14, 20]), 0.27, np.nan, lulc_xarr, new_name="Arable C")
 
     # -- GlobCover - ESA 2005 (300m)
     elif lulc_name == LandcoverStructure.GC.value:
@@ -440,7 +442,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             220: [0, 0]
         }
         # -- Produce arable c
-        arable_c_xarr = rasters.where(lulc_xarr == 40, 0.27, np.nan)
+        arable_c_xarr = rasters.where(lulc_xarr == 40, 0.27, np.nan, lulc_xarr, new_name="Arable C")
 
     # -- GlobeLand30 - China 2020 (30m)
     elif lulc_name == LandcoverStructure.GL.value:
@@ -453,7 +455,9 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             110: [0.10000000000, 0.45000000000]
         }
         # -- Produce arable c
-        arable_c_xarr = rasters.where(lulc_xarr == 10, 0.27, np.nan)
+        arable_c_xarr = rasters.where(lulc_xarr == 10, 0.27, np.nan, lulc_xarr, new_name="Arable C")
+    else:
+        raise ValueError(f"Unknown Landcover structure {lulc_name}")
 
     # -- List init
     conditions = []
@@ -474,7 +478,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     return arable_c_xarr.copy(data=c_arr)
 
 
-def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
+def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
     """
     Produce the LS factor raster
     Args:
@@ -506,6 +510,7 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
     # -- Extract epsg code of the dem
     with rasterio.open(dem_path, "r") as dem_dst:
         dem_epsg = str(dem_dst.crs)[-5:]
+        cellsizex, cellsizey = dem_dst.res
 
     # -- Compute areas of each cell in new projection
     new_crs = pyproj.Proj('+init=epsg:{}'.format(dem_epsg))
@@ -518,16 +523,12 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
     # grid.accumulation(data='dir', out_name='acc')
     grid.accumulation(data='dir', weights=weights, out_name='acc')
 
-    # -- Export  accumulation
+    # -- Export accumulation
     acc_path = os.path.join(tmp_dir, 'acc.tif')
     grid.to_raster('acc', acc_path)
 
-    # -- Extract dem spatial resolution
-    cellsizex, cellsizey = spatial_resolution(dem_path)
-
     # -- Open acc
-    with rasterio.open(acc_path) as acc_dst:
-        acc_xarr = rasters.read(acc_dst)
+    acc_xarr = rasters.read(acc_path)
 
     # -- Make slope percentage command
     slope_dem_p = os.path.join(tmp_dir, "slope_percent.tif")
@@ -541,12 +542,14 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
     misc.run_cli(cmd_slope_p)
 
     # -- Open slope p
-    with rasterio.open(slope_dem_p) as slope_dst:
-        slope_p_xarr = rasters.read(slope_dst)
+    slope_p_xarr = rasters.read(slope_dem_p)
 
     # -- m calculation
-    conditions = [slope_p_xarr < 1, (slope_p_xarr >= 1) & (slope_p_xarr > 3), (slope_p_xarr >= 3) & (slope_p_xarr > 5),
-                  (slope_p_xarr >= 5) & (slope_p_xarr > 12), slope_p_xarr >= 12]
+    conditions = [slope_p_xarr < 1,
+                  (slope_p_xarr >= 1) & (slope_p_xarr > 3),
+                  (slope_p_xarr >= 3) & (slope_p_xarr > 5),
+                  (slope_p_xarr >= 5) & (slope_p_xarr > 12),
+                  slope_p_xarr >= 12]
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
 
@@ -555,10 +558,10 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> (XDS_TYPE):
     ls_arr = (0.065 + 0.0456 * slope_p_xarr + 0.006541 * np.power(slope_p_xarr, 2)) * np.power(
         acc_xarr.astype(np.float32) * cellsizex / 22.13, m)
 
-    return slope_p_xarr.copy(data=ls_arr, deep=True)
+    return slope_p_xarr.copy(data=ls_arr)
 
 
-def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
+def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
     """
     Produce the K index outside Europe
     Args:
@@ -642,12 +645,12 @@ def produce_k_outside_europe(aoi_path: str) -> (XDS_TYPE):
     # -- Update arr with k values
     k_arr = np.select(conditions, choices, default=np.nan)
 
-    return crop_hwsd_xarr.copy(data=k_arr, deep=True)
+    return crop_hwsd_xarr.copy(data=k_arr)
 
 
 def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     """
-    A faire
+    TODO
     Args:
         input_dict (dict) : Dict that store parameters values
 
@@ -729,18 +732,20 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             raster_dict["nir"] = [nir_path, Resampling.bilinear]
         elif fcover_method == MethodType.ALREADY_PROVIDED.value:
             raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
+    else:
+        raise ValueError(f"Unknown Location Type: {location}")
 
     return raster_dict
 
 
-def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, raster_path_dict: dict,
+def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
     """
     Pre process a list of raster (clip, reproj, collocate)
     Args:
         aoi_path (str) : AOI path
         dst_resolution (int) : resolution of the output raster files
-        dst_crs (str) : CRS of the output files
+        dst_crs (CRS) : CRS of the output files
         raster_path_dict : dictionary that store the list of raster (key = alias : value : raster path)
         tmp_dir (str) : tmp directory
 
@@ -751,6 +756,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     out_dict = {}
 
     # -- Loop on path into the dict
+    ref_xarr = None
     for i, key in enumerate(raster_path_dict):
 
         arcpy.AddMessage('********* {} ********'.format(key))
@@ -765,7 +771,7 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
         resampling_method = raster_path_dict[key][1]
 
         # -- Add path to the dictionary
-        if i == 0:
+        if ref_xarr is None:
 
             # -- Re project raster and resample
             raster_reproj_xarr = raster_crop_xarr.rio.reproject(dst_crs, resolution=dst_resolution,
@@ -803,16 +809,19 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: str, rast
     return out_dict
 
 
-def produce_a_arr(r_xarr: XDS_TYPE, k_xarr: XDS_TYPE, ls_xarr: XDS_TYPE, c_xarr: XDS_TYPE,
+def produce_a_arr(r_xarr: XDS_TYPE,
+                  k_xarr: XDS_TYPE,
+                  ls_xarr: XDS_TYPE,
+                  c_xarr: XDS_TYPE,
                   p_xarr: XDS_TYPE) -> XDS_TYPE:
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
-        r_arr (XDS_TYPE): multi-annual average index xarray
-        k_arr (XDS_TYPE): susceptibility of a soil to erode xarray
-        ls_arr (XDS_TYPE) :combined Slope Length and Slope Steepness factor xarray
-        c_arr (XDS_TYPE) : Cover management factor xarray
-        p_arr (XDS_TYPE) : support practices factor xarray
+        r_xarr (XDS_TYPE): multi-annual average index xarray
+        k_xarr (XDS_TYPE): susceptibility of a soil to erode xarray
+        ls_xarr (XDS_TYPE) :combined Slope Length and Slope Steepness factor xarray
+        c_xarr (XDS_TYPE) : Cover management factor xarray
+        p_xarr (XDS_TYPE) : support practices factor xarray
 
     Returns:
         XDS_TYPE : xarray of the average annual soil loss (ton/ha/year)
@@ -822,21 +831,25 @@ def produce_a_arr(r_xarr: XDS_TYPE, k_xarr: XDS_TYPE, ls_xarr: XDS_TYPE, c_xarr:
     return r_xarr * k_xarr * ls_xarr * c_xarr * p_xarr
 
 
-def produce_a_reclass_arr(a_xarr: np.ndarray) -> (XDS_TYPE):
+def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
     """
-    Produce reclassed a
+    Produce reclassified a
     Args:
-        a_arr (np.ndarray) : a array
+        a_xarr (XDS_TYPE) : a xarray
 
     Returns:
-        XDS_TYPEy : xarray of the reclassed a raster
+        XDS_TYPE : xarray of the reclassified a raster
     """
 
-    arcpy.AddMessage("-- Produce the reclassed a --")
+    arcpy.AddMessage("-- Produce the reclassified a --")
 
     # -- List conditions and choices
-    conditions = [(a_xarr < 6.7), (a_xarr >= 6.7) & (a_xarr < 11.2), (a_xarr >= 11.2) & (a_xarr < 22.4),
-                  (a_xarr >= 22.4) & (a_xarr < 33.6), (a_xarr >= 36.2)]
+    a_arr = a_xarr.data
+    conditions = [(a_arr < 6.7),
+                  (a_arr >= 6.7) & (a_arr < 11.2),
+                  (a_arr >= 11.2) & (a_arr < 22.4),
+                  (a_arr >= 22.4) & (a_arr < 33.6),
+                  (a_arr >= 36.2)]
     choices = [1, 2, 3, 4, 5]
 
     # -- Update arr with k values
@@ -847,12 +860,10 @@ def produce_a_reclass_arr(a_xarr: np.ndarray) -> (XDS_TYPE):
 
 def produce_rusle(input_dict: dict) -> None:
     """
-    A faire
-    Args:
-        a_arr (np.ndarray) : a array
+    TODO
 
-    Returns:
-        np.ndarray : ndarray of the reclassed a raster
+    Args:
+        input_dict (dict) : Input dict containing all needed values
     """
 
     # --- Extract parameters ---
@@ -884,8 +895,12 @@ def produce_rusle(input_dict: dict) -> None:
     # -- Extract the epsg code from the reference system parameter and made the CRS
     ref_epsg = epsg_from_arcgis_proj(ref_system)
     ref_crs = CRS.from_epsg(ref_epsg)
+
     # -- Run pre process
-    post_process_dict = raster_pre_processing(aoi_path, output_resolution, CRS.from_epsg(ref_epsg), raster_dict,
+    post_process_dict = raster_pre_processing(aoi_path,
+                                              output_resolution,
+                                              CRS.from_epsg(ref_epsg),
+                                              raster_dict,
                                               tmp_dir)
     # -- AOI to gdf
     aoi_gdf = gpd.read_file(aoi_path)
@@ -902,25 +917,30 @@ def produce_rusle(input_dict: dict) -> None:
         # --- Pre-process the DEM ---
         # -- Extract DEM path
         dem_path = dem_dict[dem_name]
+
         # -- Crop DEM
         dem_crop_xarr = rasters.crop(dem_path, aoi_gdf, from_disk=True)
+
         # -- Reproj DEM
         dem_reproj_xarr = dem_crop_xarr.rio.reproject(ref_crs, resampling=Resampling.bilinear)
+
         # --- Write reproj DEM
         dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
         rasters.write(dem_reproj_xarr, dem_reproj_path, nodata=0)
 
         # --- Produce ls ---
         ls_raw_xarr = produce_ls_factor(dem_reproj_path, tmp_dir)
+
         # -- Collocate ls with the other results
-        ls_xarr = rasters.collocate(rasters.read(post_process_dict[list(post_process_dict.keys())[0]]), ls_raw_xarr,
+        ls_xarr = rasters.collocate(rasters.read(post_process_dict[list(post_process_dict.keys())[0]]),
+                                    ls_raw_xarr,
                                     Resampling.bilinear)
+
         # -- Write ls
         ls_path = os.path.join(tmp_dir, "ls.tif")
         rasters.write(ls_xarr, ls_path, nodata=0)
     else:
-        with rasterio.open(post_process_dict['ls']) as ls_dst:
-            ls_xarr = rasters.read(ls_dst)
+        ls_xarr = rasters.read(post_process_dict['ls'])
 
     # -- Check if fcover need to be calculated or not
     if fcover_method == MethodType.TO_BE_CALCULATED.value:
@@ -934,12 +954,12 @@ def produce_rusle(input_dict: dict) -> None:
         rasters.write(fcover_xarr, fcover_path, nodata=0)
 
     elif fcover_method == MethodType.ALREADY_PROVIDED.value:
-        with rasterio.open(post_process_dict["fcover"]) as fcover_dst:
-            fcover_xarr = rasters.read(fcover_dst)
+        fcover_xarr = rasters.read(post_process_dict["fcover"])
+    else:
+        raise ValueError(f"Unknown FCover Method: {fcover_method}")
 
     # -- Mask lulc if del
     if del_path:
-
         # -- Update the lulc with the DEL
         arcpy.AddMessage("-- Update raster values covered by DEL --")
 
@@ -958,8 +978,7 @@ def produce_rusle(input_dict: dict) -> None:
 
     else:
         # -- Open the lulc raster
-        with rasterio.open(post_process_dict["lulc"]) as lulc_dst:
-            lulc_xarr = rasters.read(lulc_dst)
+        lulc_xarr = rasters.read(post_process_dict["lulc"])
 
     # -- Process C
     c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
@@ -978,16 +997,15 @@ def produce_rusle(input_dict: dict) -> None:
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_xarr, p_path, nodata=0)
     elif location == LocationType.EUROPE.value:
-        with rasterio.open(post_process_dict["p"]) as p_dst:
-            p_xarr = rasters.read(p_dst)
+        p_xarr = rasters.read(post_process_dict["p"])
+    else:
+        raise ValueError(f"Unknown Location Type {location}")
 
     # -- Open r
-    with rasterio.open(post_process_dict["r"]) as r_dst:
-        r_xarr = rasters.read(r_dst)
+    r_xarr = rasters.read(post_process_dict["r"])
 
     # -- Open k
-    with rasterio.open(post_process_dict["k"]) as k_dst:
-        k_xarr = rasters.read(k_dst)
+    k_xarr = rasters.read(post_process_dict["k"])
 
     # -- Produce a with RUSLE model
     a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
@@ -1003,12 +1021,9 @@ def produce_rusle(input_dict: dict) -> None:
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
     rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
 
-    return
-
 
 if __name__ == '__main__':
-
-    logger = logging.getLogger("EO occurrence")
+    logger = logging.getLogger("RUSLE")
     handler = ArcPyLogHandler(
         "output_log.log",
         maxBytes=1024 * 1024 * 2,  # 2MB log files
