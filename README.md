@@ -45,6 +45,13 @@ Can be :
 - "Already provided" : When the LS raster already exists. You will have to load it in the **"LS raster"** parameter.
 - Or "To be calculated" : When the LS raster does not exist. To produce it you will have to **chose or load the DEM** that will be use to produce it with the "DEM" parameter.
 
+**DEM** : Name of the DEM that will be used.
+Can be :
+- "EUDEM 25m"
+- "SRTM 30m"
+- "MERIT 5 deg"
+- "Other" : A DEM other than those listed above.
+
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
 
 
