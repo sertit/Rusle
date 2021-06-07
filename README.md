@@ -24,7 +24,9 @@ With :
 _NDVI_ : Normalized Difference Vegetation Index
 ; _NDVI_s_ : NDVI Min
 ; _NDVI_v_ : NDVI Max
+
 To produce it you will have to load a NIR infrared and a red band that cover the AOI.
+
 
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
 
