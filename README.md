@@ -45,7 +45,7 @@ Can be :
 - "Already provided" : When the LS raster already exists. You will have to load it in the **"LS raster"** parameter.
 - Or "To be calculated" : When the LS raster does not exist. To produce it you will have to **chose or load the DEM** that will be use to produce it with the "DEM" parameter.
 
-**DEM** : Name of the DEM that will be used.
+**DEM** (if LS method == "To be calculated") : Name of the DEM that will be used.
 Can be :
 - "EUDEM 25m"
 - "SRTM 30m"
