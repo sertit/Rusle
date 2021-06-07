@@ -1027,6 +1027,7 @@ def produce_rusle(input_dict: dict) -> None:
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
     rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
 
+    return
 
 if __name__ == '__main__':
     logger = logging.getLogger("RUSLE")
