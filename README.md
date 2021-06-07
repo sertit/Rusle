@@ -1,6 +1,6 @@
-# RUSLE
+- # RUSLE
+- Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
-Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 ## Inputs
 
