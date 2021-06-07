@@ -50,7 +50,13 @@ Can be :
 - "EUDEM 25m"
 - "SRTM 30m"
 - "MERIT 5 deg"
-- "Other" : A DEM other than those listed above.
+- "Other" : A DEM other than those listed above. Need to be load in the **"DEM raster"** parameter
+
+**Output resolution** : Resolution of the output raster
+
+**Coordinate system** : Coordinate system of the output raster
+
+**Output folder** : Output folder
 
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
 
