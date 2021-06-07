@@ -21,9 +21,9 @@ Can be :
 
 _(NDVI - NDVI_s)/(NDVI_v - NDVI_s)_
 With :
--NDVI : Normalized Difference Vegetation Index
--NDVI_s : NDVI Min
--NDVI_v : NDVI Max
+NDVI : Normalized Difference Vegetation Index
+; NDVI_s : NDVI Min
+; NDVI_v : NDVI Max
 
 To produce it you will have to load a NIR infrared and a red band that cover the AOI.
 
