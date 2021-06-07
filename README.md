@@ -36,7 +36,7 @@ Can be :
 - "Global Land Cover - Copernicus 2020 (100m)"
 - "GlobCover - ESA 2005 (300m)"
 - "GlobeLand30 - China 2020 (30m)"
-- "P03" : P03 produce. The raster need to be load ("P03_raster" parameter)
+- "P03" : P03 produce. The **"P03 raster"** need to be load
 
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
 
