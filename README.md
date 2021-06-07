@@ -1,8 +1,13 @@
 # RUSLE
 
-Processing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
+Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 ## Inputs
+
+### Location of the AOI.
+Can be :
+- "Europe" : AOI located in Europe
+- Or "Global" : AOI located outside Europe
 
 
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
