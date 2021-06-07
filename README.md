@@ -4,16 +4,16 @@ Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 ## Inputs
 
-**Aoi**
+**Aoi** : 
 AOI path.
 
-**Location**
+**Location** : 
 Location of the AOI.
 Can be :
 - "Europe" : AOI located in Europe
 - Or "Global" : AOI located outside Europe
 
-**Fcover_method**
+**Fcover_method** :
 Calculation method of the Fraction of green Vegetation Coverportal (Fcover).
 Can be :
 - "Already provided" : When the Fcover raster already exists. You will have to load it in the "FCover" parameter.
