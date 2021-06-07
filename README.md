@@ -31,7 +31,6 @@ To produce it you will have to load a **NIR infrared band** and a **Red band** t
 
 **Landcover** : 
 Name of the Landcover that will be used.
-
 Can be :
 - "Corine Land Cover - 2018 (100m)"
 - "Global Land Cover - Copernicus 2020 (100m)"
