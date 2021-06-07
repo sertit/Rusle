@@ -38,6 +38,13 @@ Can be :
 - "GlobeLand30 - China 2020 (30m)"
 - "P03" : P03 produce. The **"P03 raster"** need to be load
 
+**Delineation** : Wildfire delineation path
+
+**LS_method** : Calculation method of the Slope angle and length (LS factor).
+Can be :
+- "Already provided" : When the LS raster already exists. You will have to load it in the **"LS raster"** parameter.
+- Or "To be calculated" : When the LS raster does not exist. To produce it you will have to **chose or load the DEM** that will be use to produce it with the "DEM" parameter.
+
 ![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
 
 
