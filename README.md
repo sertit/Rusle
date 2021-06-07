@@ -1,11 +1,12 @@
-- # RUSLE
-- Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
+# RUSLE
+Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 
 ## Inputs
 
-##### _Aoi_
+- ##### _Aoi_
 AOI path.
+
 
 ##### _Location_
 Location of the AOI.
