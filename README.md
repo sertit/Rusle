@@ -3,6 +3,8 @@ Computing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 :warning: **CONDA ENVIRONMENT**  
 **Be sure to have your ArcgisPro conda environment installed.
+See [here](https://code.sertit.unistra.fr/arcgis-pro/sertit-eo-conda-environment) for more information.**
+
 
 ## Inputs
 
