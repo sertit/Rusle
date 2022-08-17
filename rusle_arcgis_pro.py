@@ -372,7 +372,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     print(lulc_name)
     # --- Identify Cfactor
     # -- Cfactor dict and c_arr_arable
-    if lulc_name == LandcoverStructure.CLC.value:
+    if (lulc_name == LandcoverStructure.CLC.value) or (lulc_name == LandcoverStructure.P03.value):  # TODO to check
         cfactor_dict = {
             221: [0.15, 0.45],
             222: [0.1, 0.3],
@@ -387,6 +387,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             313: [0.0001, 0.003],
             321: [0.01, 0.08],
             322: [0.01, 0.1],
+            323: [0.01, 0.1],
             324: [0.003, 0.05],
             331: [0, 0],
             332: [0, 0],
@@ -834,7 +835,7 @@ def produce_a_arr(r_xarr: XDS_TYPE,
     """
     LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
-    return r_xarr * k_xarr * ls_xarr * c_xarr * p_xarr
+    return r_xarr * k_xarr * ls_xarr * c_xarr  # * p_xarr TODO Check the Pfactor : Pas complet donc décidé avec Mathilde de ne pas le prendre en compte
 
 
 def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
@@ -855,7 +856,7 @@ def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
                   (a_arr >= 6.7) & (a_arr < 11.2),
                   (a_arr >= 11.2) & (a_arr < 22.4),
                   (a_arr >= 22.4) & (a_arr < 33.6),
-                  (a_arr >= 36.2)]
+                  (a_arr >= 33.6)]
     choices = [1, 2, 3, 4, 5]
 
     # -- Update arr with k values
@@ -1028,6 +1029,7 @@ def produce_rusle(input_dict: dict) -> None:
     rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
 
     return
+
 
 if __name__ == '__main__':
     logger = logging.getLogger("RUSLE")
