@@ -150,7 +150,7 @@ class LandcoverStructure(ListEnum):
     GLC = "Global Land Cover - Copernicus 2020 (100m)"
     GC = "GlobCover - ESA 2005 (300m)"
     GL = "GlobeLand30 - China 2020 (30m)"
-    P03 = "Corine Land Cover - 2018 (100m)"
+    P03 = "P03"
 
 
 def epsg_from_arcgis_proj(arcgis_proj):
@@ -372,7 +372,9 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     print(lulc_name)
     # --- Identify Cfactor
     # -- Cfactor dict and c_arr_arable
-    if (lulc_name == LandcoverStructure.CLC.value) or (lulc_name == LandcoverStructure.P03.value):  # TODO to check
+
+    if (lulc_name == LandcoverStructure.CLC.value) or (lulc_name == LandcoverType.P03.value):
+
         cfactor_dict = {
             221: [0.15, 0.45],
             222: [0.1, 0.3],
@@ -401,6 +403,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     # -- Global Land Cover - Copernicus 2020 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
+            334: [0.1, 0.55],
             111: [0.0001, 0.003],
             113: [0.0001, 0.003],
             112: [0.0001, 0.003],
@@ -427,6 +430,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     # -- GlobCover - ESA 2005 (300m)
     elif lulc_name == LandcoverStructure.GC.value:
         cfactor_dict = {
+            334: [0.1, 0.55],
             11: [0.07, 0.2],
             14: [0.07, 0.2],
             20: [0.07, 0.2],
@@ -454,6 +458,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     # -- GlobeLand30 - China 2020 (30m)
     elif lulc_name == LandcoverStructure.GL.value:
         cfactor_dict = {
+            334: [0.1, 0.55],
             20: [0.00010000000, 0.00250000000],
             30: [0.01000000000, 0.07000000000],
             40: [0.01000000000, 0.08000000000],
@@ -652,7 +657,10 @@ def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
     # -- Update arr with k values
     k_arr = np.select(conditions, choices, default=np.nan)
 
-    return crop_hwsd_xarr.copy(data=k_arr)
+    # Convert to xarr
+    k_result_xarr = crop_hwsd_xarr.astype(np.float32).copy(data=k_arr)
+
+    return k_result_xarr
 
 
 def make_raster_list_to_pre_process(input_dict: dict) -> dict:
