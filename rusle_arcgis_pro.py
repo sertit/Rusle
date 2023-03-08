@@ -35,8 +35,6 @@ import arcpy
 import shapely
 from shapely import speedups
 
-shapely.speedups.disable()
-
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
@@ -68,8 +66,6 @@ GL_PATH = ""  # To add
 EUDEM_PATH = os.path.join(GLOBAL_DIR, "EUDEM_v2", "eudem_dem_3035_europe.tif")
 SRTM30_PATH = os.path.join(GLOBAL_DIR, "SRTM_30m_v4", "index.vrt")
 MERIT_PATH = os.path.join(GLOBAL_DIR, "MERIT_Hydrologically_Adjusted_Elevations", "MERIT_DEM.vrt")
-
-speedups.disable()
 
 
 class ArcPyLogHandler(logging.handlers.RotatingFileHandler):
@@ -501,43 +497,38 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
         XDS_TYPE : xarray of the ls factor raster
     """
 
-    LOGGER.info("-- Produce the LS factor --")
-
     # -- Compute D8 flow directions
-    grid = Grid.from_raster(dem_path, data_name='dem')
+    grid = Grid.from_raster(dem_path)
+    dem = grid.read_raster(dem_path)
 
-    # -- Fill dem
-    grid.fill_depressions(data='dem', out_name='filled_dem')
+    # Fill pits in DEM
+    pit_filled_dem = grid.fill_pits(dem)
 
-    # -- Resolve flat
-    grid.resolve_flats(data='filled_dem', out_name='inflated_dem')
+    # Fill depressions in DEM
+    flooded_dem = grid.fill_depressions(pit_filled_dem)
 
-    # -- Produce dir
-    grid.flowdir('inflated_dem', out_name='dir')
+    # Resolve flats in DEM
+    inflated_dem = grid.resolve_flats(flooded_dem)
 
-    # -- Export flow directions
+    # Determine D8 flow directions from DEM
+    # Specify directional mapping : http://mattbartos.com/pysheds/flow-directions.html
+    dirmap = (64, 128, 1, 2, 4, 8, 16, 32)
+
+    # Compute flow directions
+    fdir = grid.flowdir(inflated_dem, dirmap=dirmap)
+
+    # # -- Export flow directions
     dir_path = os.path.join(tmp_dir, 'dir.tif')
-    grid.to_raster('dir', dir_path)
+    grid.to_raster(fdir, dir_path, target_view=fdir.viewfinder,
+                   blockxsize=16, blockysize=16)
 
-    # -- Extract epsg code of the dem
-    with rasterio.open(dem_path, "r") as dem_dst:
-        dem_epsg = str(dem_dst.crs)[-5:]
-        cellsizex, cellsizey = dem_dst.res
-
-    # -- Compute areas of each cell in new projection
-    new_crs = pyproj.Proj('+init=epsg:{}'.format(dem_epsg))
-    areas = grid.cell_area(as_crs=new_crs, inplace=False)
-
-    # -- Weight each cell by its relative area
-    weights = (areas / areas.max()).ravel()
-
-    # -- Compute accumulation
-    # grid.accumulation(data='dir', out_name='acc')
-    grid.accumulation(data='dir', weights=weights, out_name='acc')
+    # Calculate flow accumulation
+    acc = grid.accumulation(fdir, dirmap=dirmap)
 
     # -- Export accumulation
     acc_path = os.path.join(tmp_dir, 'acc.tif')
-    grid.to_raster('acc', acc_path)
+    grid.to_raster(acc, acc_path, target_view=acc.viewfinder,
+                   blockxsize=16, blockysize=16)
 
     # -- Open acc
     acc_xarr = rasters.read(acc_path)
@@ -564,6 +555,11 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
                   slope_p_xarr >= 12]
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
+
+    # -- Extract cell size of the dem
+    with rasterio.open(dem_path, "r") as dem_dst:
+        # dem_epsg = str(dem_dst.crs)[-5:]
+        cellsizex, cellsizey = dem_dst.res
 
     # -- Produce ls
     # -- Equation 1 : https://www.researchgate.net/publication/338535112_A_Review_of_RUSLE_Model
