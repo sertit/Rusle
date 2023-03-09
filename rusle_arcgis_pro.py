@@ -67,6 +67,9 @@ EUDEM_PATH = os.path.join(GLOBAL_DIR, "EUDEM_v2", "eudem_dem_3035_europe.tif")
 SRTM30_PATH = os.path.join(GLOBAL_DIR, "SRTM_30m_v4", "index.vrt")
 MERIT_PATH = os.path.join(GLOBAL_DIR, "MERIT_Hydrologically_Adjusted_Elevations", "MERIT_DEM.vrt")
 
+# Buffer apply to the AOI
+AOI_BUFFER = 5000
+
 
 class ArcPyLogHandler(logging.handlers.RotatingFileHandler):
     """
@@ -395,7 +398,11 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
         }
         # -- Produce arable c
         arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
-        arable_c_xarr = rasters.where(lulc_xarr == 211, arable_c_xarr, np.nan)
+        arable_c_xarr = rasters.where(np.isin(lulc_xarr,
+                                              [111, 112, 121, 122, 123, 124, 131, 132, 133, 141, 142, 211, 212, 213,
+                                               411, 412, 421, 422, 423, 511, 512, 521, 522, 523, 999]), arable_c_xarr,
+                                      np.nan)
+
     # -- Global Land Cover - Copernicus 2020 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
@@ -421,7 +428,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
             70: [0, 0]
         }
         # -- Produce arable c
-        arable_c_xarr = rasters.where(np.isin(lulc_xarr, [11, 14, 20]), 0.27, np.nan, lulc_xarr, new_name="Arable C")
+        arable_c_xarr = rasters.where(np.isin(lulc_xarr, [50, 80, 200]), 0.27, np.nan, lulc_xarr, new_name="Arable C")
 
     # -- GlobCover - ESA 2005 (300m)
     elif lulc_name == LandcoverStructure.GC.value:
@@ -772,14 +779,17 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
 
         LOGGER.info('********* {} ********'.format(key))
         # -- Store raster path
+        # key = "lulc"
         raster_path = raster_path_dict[key][0]
-
-        # -- Crop raster
-        aoi_gdf = gpd.read_file(aoi_path)
-        raster_crop_xarr = rasters.crop(raster_path, aoi_gdf, from_disk=True)
 
         # -- Store resampling method
         resampling_method = raster_path_dict[key][1]
+
+        # -- Read AOI
+        aoi_gdf = gpd.read_file(aoi_path)
+
+        # -- Crop raster
+        raster_crop_xarr = rasters.crop(raster_path, aoi_gdf, from_disk=True)
 
         # -- Add path to the dictionary
         if ref_xarr is None:
@@ -839,7 +849,7 @@ def produce_a_arr(r_xarr: XDS_TYPE,
     """
     LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
-    return r_xarr * k_xarr * ls_xarr * c_xarr  # * p_xarr TODO Check the Pfactor : Pas complet donc décidé avec Mathilde de ne pas le prendre en compte
+    return r_xarr * k_xarr * ls_xarr * c_xarr  # * p_xarr  # TODO Check the Pfactor
 
 
 def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
@@ -878,7 +888,7 @@ def produce_rusle(input_dict: dict) -> None:
     """
 
     # --- Extract parameters ---
-    aoi_path = input_dict.get("aoi_path")
+    aoi_raw_path = input_dict.get("aoi_path")
     location = input_dict.get("location")
     fcover_method = input_dict.get("fcover_method")
     landcover_name = input_dict.get("landcover_name")
@@ -896,6 +906,25 @@ def produce_rusle(input_dict: dict) -> None:
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
+    # -- Extract the epsg code from the reference system parameter and made the CRS
+    ref_epsg = epsg_from_arcgis_proj(ref_system)  # TODO
+    ref_crs = CRS.from_epsg(ref_epsg)
+
+    # -- Apply a buffer to the AOI
+    # - Open aoi
+    aoi_gdf = gpd.read_file(aoi_raw_path)
+    # - Reproject aoi
+    aoi_gdf = aoi_gdf.to_crs(ref_epsg)
+    # - Apply buffer
+    aoi_gdf.geometry = aoi_gdf.geometry.buffer(AOI_BUFFER)
+
+    # Export the new aoi
+    aoi_path = os.path.join(tmp_dir, "aoi_buff5.shp")
+    aoi_gdf.to_file(aoi_path)
+
+    # Change the path in the input_dict
+    input_dict["aoi_path"] = aoi_path
+
     # --- Check if parameters values are ok ---
     check_parameters(input_dict)
 
@@ -903,17 +932,13 @@ def produce_rusle(input_dict: dict) -> None:
     raster_dict = make_raster_list_to_pre_process(input_dict)
 
     # --- Pre-process raster ---
-    # -- Extract the epsg code from the reference system parameter and made the CRS
-    ref_epsg = epsg_from_arcgis_proj(ref_system)
-    ref_crs = CRS.from_epsg(ref_epsg)
-
     # -- Run pre process
     post_process_dict = raster_pre_processing(aoi_path,
                                               output_resolution,
                                               CRS.from_epsg(ref_epsg),
                                               raster_dict,
                                               tmp_dir)
-    # -- AOI to gdf
+    # -- Read the aoi file
     aoi_gdf = gpd.read_file(aoi_path)
 
     # -- Check if ls need to be calculated or not
@@ -1070,6 +1095,26 @@ if __name__ == '__main__':
         "output_resolution": int(str(arcpy.GetParameterAsText(13))),
         "ref_system": arcpy.GetParameterAsText(14),
         "output_dir": str(arcpy.GetParameterAsText(15))}
+
+    # input_dict = {
+    #     "aoi_path": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_aoi_32631.shp"),
+    #     "location": str("Europe"),
+    #     "fcover_method": str("To be calculated"),
+    #     "fcover_path": str(""),
+    #     "nir_path": str(
+    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
+    #     "red_path": str(
+    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B04_10m.jp2"),
+    #     "landcover_name": str("Global Land Cover - Copernicus 2020 (100m)"),
+    #     "p03_path": str(r""),
+    #     "del_path": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_del_32631.shp"),
+    #     "ls_method": str("To be calculated"),
+    #     "ls_path": str(""),
+    #     "dem_name": str(r"EUDEM 25m"),
+    #     "other_dem_path": str(r""),
+    #     "output_resolution": int(5),
+    #     "ref_system": "",
+    #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\output")}
 
     try:
         # Compute raster RUSLE
