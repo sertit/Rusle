@@ -57,8 +57,8 @@ CLC_PATH = os.path.join(GLOBAL_DIR, "Corine_Land_Cover", "CLC_2018", "clc2018_cl
                         "CLC2018_CLC2018_V2018_20.tif")
 R_GLOBAL_PATH = os.path.join(GLOBAL_DIR, "Global_Rainfall_Erosivity", "GlobalR_NoPol.tif")
 
-GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2019",
-                        "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif")
+GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2018",
+                        "PROBAV_LC100_global_v3.0.1_2018-conso_Discrete-Classification-map_EPSG-4326.tif")
 GC_PATH = os.path.join(GLOBAL_DIR, "Globcover_2009", "Globcover2009_V2.3_Global_",
                        "GLOBCOVER_L4_200901_200912_V2.3.tif")
 GL_PATH = ""  # To add
@@ -242,7 +242,8 @@ def norm_diff(xarr_1: XDS_TYPE, xarr_2: XDS_TYPE, new_name: str = "") -> XDS_TYP
     return rasters.set_metadata(norm_xda, norm_xda, new_name=new_name)
 
 
-def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) -> XDS_TYPE:
+def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str, ref_crs: int,
+                   output_resolution: int) -> XDS_TYPE:
     """
     Produce the fcover index
     Args:
@@ -250,32 +251,37 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str) ->
         nir_path (str): nir band path
         aoi_path (str): AOI path
         tmp_dir (str) : Temp dir where the cropped Raster will be stored
+        ref_crs (int) : ref crs
+        output_resolution (int) : output resolution
 
     Returns:
         XDS_TYPE : xarray of the fcover raster
     """
     LOGGER.info("-- Produce the fcover index --")
 
+    # -- Open AOI
+    aoi_gdf = gpd.read_file(aoi_path)
+
     # -- Read RED
-    red_xarr = rasters.read(red_path).astype(np.float32)  # No need to normalize, only used in NDVI
+    red_xarr = rasters.read(red_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Read NIR
-    nir_xarr = rasters.read(nir_path).astype(np.float32)  # No need to normalize, only used in NDVI
+    nir_xarr = rasters.read(nir_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Process NDVI
     ndvi_xarr = norm_diff(nir_xarr, red_xarr, new_name="NDVI")
 
-    # -- Re project the AOI if needed
-    aoi_gdf = gpd.read_file(aoi_path)
-    if aoi_gdf.crs != red_xarr.rio.crs:
-        aoi_gdf = aoi_gdf.to_crs(red_xarr.rio.crs)
+    # -- Reproject the raster
+    # -- Re project raster and resample
+    ndvi_reproj_xarr = ndvi_xarr.rio.reproject(ref_crs, resolution=output_resolution,
+                                               resampling=Resampling.bilinear)
 
     # -- Crop the NDVI with reprojected AOI
-    ndvi_crop_xarr = rasters.crop(ndvi_xarr, aoi_gdf)
+    ndvi_crop_xarr = rasters.crop(ndvi_reproj_xarr, aoi_gdf)
 
     # -- Write the NDVI cropped
     ndvi_crop_path = os.path.join(files.to_abspath(tmp_dir), 'ndvi.tif')
-    rasters.write(ndvi_crop_xarr, ndvi_crop_path, nodata=0)
+    rasters.write(ndvi_crop_xarr, ndvi_crop_path)  # , nodata=0)
 
     # -- Extract NDVI min and max inside the AOI
     ndvi_stat = zonal_stats(aoi_gdf, ndvi_crop_path, stats="min max")
@@ -732,7 +738,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         k_xarr = produce_k_outside_europe(aoi_path)
         # -- Write k raster
         k_path = os.path.join(tmp_dir, 'k_raw.tif')
-        rasters.write(k_xarr, k_path, nodata=0)
+        rasters.write(k_xarr, k_path)  # , nodata=0)
 
         # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
@@ -788,41 +794,45 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
         # -- Read AOI
         aoi_gdf = gpd.read_file(aoi_path)
 
-        # -- Crop raster
-        raster_crop_xarr = rasters.crop(raster_path, aoi_gdf, from_disk=True)
+        # -- Read raster
+        raster_xarr = rasters.read(raster_path, window=aoi_gdf)
 
         # -- Add path to the dictionary
         if ref_xarr is None:
 
             # -- Re project raster and resample
-            raster_reproj_xarr = raster_crop_xarr.rio.reproject(dst_crs, resolution=dst_resolution,
-                                                                resampling=resampling_method)
+            raster_reproj_xarr = raster_xarr.rio.reproject(dst_crs, resolution=dst_resolution,
+                                                           resampling=resampling_method)
 
-            # -- Re crop raster with AOI
-            raster_recrop_xarr = rasters.crop(raster_reproj_xarr, aoi_gdf, from_disk=True)
+            # -- Crop raster with AOI
+            raster_crop_xarr = rasters.crop(raster_reproj_xarr, aoi_gdf, from_disk=True)
 
             # -- Write masked raster
             raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
-            rasters.write(raster_recrop_xarr, raster_path, nodata=0)
+            rasters.write(raster_crop_xarr, raster_path)
 
             # -- Store path result in a dict
             out_dict[key] = raster_path
 
             # -- Copy the reference xarray
-            ref_xarr = raster_recrop_xarr.copy()
+            ref_xarr = raster_crop_xarr.copy()
 
         else:
 
             # -- Collocate raster
             # LOGGER.info('Collocate')
-            raster_collocate_xarr = rasters.collocate(ref_xarr, raster_crop_xarr, resampling_method)
+            raster_collocate_xarr = rasters.collocate(ref_xarr, raster_xarr, resampling_method)
 
             # -- Mask raster with AOI
             raster_masked_xarr = rasters.mask(raster_collocate_xarr, aoi_gdf)
 
             # -- Write masked raster
             raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
-            rasters.write(raster_masked_xarr, raster_path, nodata=0)
+
+            if "NODATA_value" in raster_masked_xarr.attrs:  # TODO To drop if better solution for this LULC
+                rasters.write(raster_masked_xarr, raster_path, nodata=raster_masked_xarr.attrs['NODATA_value'])
+            else:
+                rasters.write(raster_masked_xarr, raster_path)
 
             # -- Store path result in a dict
             out_dict[key] = raster_path
@@ -907,7 +917,7 @@ def produce_rusle(input_dict: dict) -> None:
         os.makedirs(tmp_dir)
 
     # -- Extract the epsg code from the reference system parameter and made the CRS
-    ref_epsg = epsg_from_arcgis_proj(ref_system)  # TODO
+    ref_epsg = epsg_from_arcgis_proj(ref_system)
     ref_crs = CRS.from_epsg(ref_epsg)
 
     # -- Apply a buffer to the AOI
@@ -954,43 +964,46 @@ def produce_rusle(input_dict: dict) -> None:
         # -- Extract DEM path
         dem_path = dem_dict[dem_name]
 
-        # -- Crop DEM
-        dem_crop_xarr = rasters.crop(dem_path, aoi_gdf, from_disk=True)
+        # Read the raster
+        dem_xarr = rasters.read(dem_path, window=aoi_gdf)
 
         # -- Reproj DEM
-        dem_reproj_xarr = dem_crop_xarr.rio.reproject(ref_crs, resampling=Resampling.bilinear)
+        dem_reproj_xarr = dem_xarr.rio.reproject(ref_crs, resampling=Resampling.bilinear)
+
+        # -- Crop DEM
+        dem_crop_xarr = rasters.crop(dem_reproj_xarr, aoi_gdf, from_disk=True)
 
         # --- Write reproj DEM
         dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
-        rasters.write(dem_reproj_xarr, dem_reproj_path, nodata=0)
+        rasters.write(dem_crop_xarr, dem_reproj_path)  # , nodata=0)
 
         # --- Produce ls ---
         ls_raw_xarr = produce_ls_factor(dem_reproj_path, tmp_dir)
 
         # -- Collocate ls with the other results
-        ls_xarr = rasters.collocate(rasters.read(post_process_dict[list(post_process_dict.keys())[0]]),
+        ls_xarr = rasters.collocate(rasters.read(post_process_dict[list(post_process_dict.keys())[0]], window=aoi_gdf),
                                     ls_raw_xarr,
                                     Resampling.bilinear)
 
         # -- Write ls
         ls_path = os.path.join(tmp_dir, "ls.tif")
-        rasters.write(ls_xarr, ls_path, nodata=0)
+        rasters.write(ls_xarr, ls_path)  # , nodata=0)
     else:
-        ls_xarr = rasters.read(post_process_dict['ls'])
+        ls_xarr = rasters.read(post_process_dict['ls'], window=aoi_gdf)
 
     # -- Check if fcover need to be calculated or not
     if fcover_method == MethodType.TO_BE_CALCULATED.value:
         # -- Process fcover
         red_process_path = post_process_dict["red"]
         nir_process_path = post_process_dict["nir"]
-        fcover_xarr = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir)
+        fcover_xarr = produce_fcover(red_process_path, nir_process_path, aoi_path, tmp_dir, ref_crs, output_resolution)
 
         # -- Write fcover
         fcover_path = os.path.join(tmp_dir, "fcover.tif")
-        rasters.write(fcover_xarr, fcover_path, nodata=0)
+        rasters.write(fcover_xarr, fcover_path)  # , nodata=0)
 
     elif fcover_method == MethodType.ALREADY_PROVIDED.value:
-        fcover_xarr = rasters.read(post_process_dict["fcover"])
+        fcover_xarr = rasters.read(post_process_dict["fcover"], window=aoi_gdf)
     else:
         raise ValueError(f"Unknown FCover Method: {fcover_method}")
 
@@ -1008,20 +1021,20 @@ def produce_rusle(input_dict: dict) -> None:
 
         # -- Write the lulc with fire
         lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
-        rasters.write(lulc_del_xarr, lulc_masked_path, nodata=0)
+        rasters.write(lulc_del_xarr, lulc_masked_path)  # , nodata=0)
 
         lulc_xarr = lulc_del_xarr.copy()
 
     else:
         # -- Open the lulc raster
-        lulc_xarr = rasters.read(post_process_dict["lulc"])
+        lulc_xarr = rasters.read(post_process_dict["lulc"], window=aoi_gdf)
 
     # -- Process C
     c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
 
     # -- Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
-    rasters.write(c_xarr, c_out, nodata=0)
+    rasters.write(c_xarr, c_out)  # , nodata=0)
 
     # -- Produce p if location is GLOBAL
     if location == LocationType.GLOBAL.value:
@@ -1031,31 +1044,31 @@ def produce_rusle(input_dict: dict) -> None:
 
         # -- Write p
         p_path = os.path.join(tmp_dir, "p.tif")
-        rasters.write(p_xarr, p_path, nodata=0)
+        rasters.write(p_xarr, p_path)  # , nodata=0)
     elif location == LocationType.EUROPE.value:
-        p_xarr = rasters.read(post_process_dict["p"])
+        p_xarr = rasters.read(post_process_dict["p"], window=aoi_gdf)
     else:
         raise ValueError(f"Unknown Location Type {location}")
 
     # -- Open r
-    r_xarr = rasters.read(post_process_dict["r"])
+    r_xarr = rasters.read(post_process_dict["r"], window=aoi_gdf)
 
     # -- Open k
-    k_xarr = rasters.read(post_process_dict["k"])
+    k_xarr = rasters.read(post_process_dict["k"], window=aoi_gdf)
 
     # -- Produce a with RUSLE model
     a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
 
     # -- Write the a raster
     a_path = os.path.join(output_dir, "a_rusle.tif")
-    rasters.write(a_xarr, a_path, nodata=0)
+    rasters.write(a_xarr, a_path)  # , nodata=0)
 
     # -- Reclass a
     a_reclas_xarr = produce_a_reclass_arr(a_xarr)
 
     # -- Write the a raster
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
-    rasters.write(a_reclas_xarr, a_reclass_path, nodata=0)
+    rasters.write(a_reclas_xarr, a_reclass_path)  # , nodata=0)
 
     return
 
@@ -1121,15 +1134,6 @@ if __name__ == '__main__':
         produce_rusle(input_dict)
 
         LOGGER.info('RUSLE was a success.')
-
-        # Add to the current map if exist
-        # arcpy.MakeRasterLayer_management(input_dict["output_dir"])
-        # aprx = arcpy.mp.ArcGISProject("CURRENT")
-        # map = aprx.listMaps('*')
-        # if len(map) != 0:
-        #     map = aprx.listMaps('*')[0]
-        #     if map is not None:
-        #         raster = map.addDataFromPath(input_dict["output_file"])
 
     except Exception as ex:
         import traceback
