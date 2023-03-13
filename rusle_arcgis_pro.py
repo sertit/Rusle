@@ -57,8 +57,8 @@ CLC_PATH = os.path.join(GLOBAL_DIR, "Corine_Land_Cover", "CLC_2018", "clc2018_cl
                         "CLC2018_CLC2018_V2018_20.tif")
 R_GLOBAL_PATH = os.path.join(GLOBAL_DIR, "Global_Rainfall_Erosivity", "GlobalR_NoPol.tif")
 
-GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2018",
-                        "PROBAV_LC100_global_v3.0.1_2018-conso_Discrete-Classification-map_EPSG-4326.tif")
+GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2017",
+                        "PROBAV_LC100_global_v3.0.1_2017-conso_Discrete-Classification-map_EPSG-4326.tif")
 GC_PATH = os.path.join(GLOBAL_DIR, "Globcover_2009", "Globcover2009_V2.3_Global_",
                        "GLOBCOVER_L4_200901_200912_V2.3.tif")
 GL_PATH = ""  # To add
@@ -808,11 +808,11 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
             raster_crop_xarr = rasters.crop(raster_reproj_xarr, aoi_gdf, from_disk=True)
 
             # -- Write masked raster
-            raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
-            rasters.write(raster_crop_xarr, raster_path)
+            raster_path_out = os.path.join(tmp_dir, "{}.tif".format(key))
+            rasters.write(raster_crop_xarr, raster_path_out)
 
             # -- Store path result in a dict
-            out_dict[key] = raster_path
+            out_dict[key] = raster_path_out
 
             # -- Copy the reference xarray
             ref_xarr = raster_crop_xarr.copy()
@@ -827,15 +827,11 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
             raster_masked_xarr = rasters.mask(raster_collocate_xarr, aoi_gdf)
 
             # -- Write masked raster
-            raster_path = os.path.join(tmp_dir, "{}.tif".format(key))
-
-            if "NODATA_value" in raster_masked_xarr.attrs:  # TODO To drop if better solution for this LULC
-                rasters.write(raster_masked_xarr, raster_path, nodata=raster_masked_xarr.attrs['NODATA_value'])
-            else:
-                rasters.write(raster_masked_xarr, raster_path)
+            raster_path_out = os.path.join(tmp_dir, "{}.tif".format(key))
+            rasters.write(raster_masked_xarr, raster_path_out)
 
             # -- Store path result in a dict
-            out_dict[key] = raster_path
+            out_dict[key] = raster_path_out
 
     return out_dict
 
