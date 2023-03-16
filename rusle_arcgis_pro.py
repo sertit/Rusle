@@ -3,7 +3,7 @@ Produce RUSLE raster
 
 """
 
-__author__ = "Ledauphin Thomas, Rémi BRAUN"
+__author__ = "Ledauphin Thomas"
 __contact__ = "tledauphin@unistra.fr"
 __python__ = "3.7.0"
 __created__ = "24/02/2021"

@@ -3,7 +3,7 @@ Processing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
 
 """
 
-__author__ = "Ledauphin Thomas, Rémi BRAUN"
+__author__ = "Ledauphin Thomas"
 __contact__ = "tledauphin@unistra.fr"
 __python__ = "3.7.0"
 __created__ = "24/02/2021"
@@ -178,23 +178,6 @@ class LandcoverStructure(ListEnum):
     GC = "GlobCover - ESA 2005 (300m)"
     GL = "GlobeLand30 - China 2020 (30m)"
     P03 = "P03"
-
-
-def epsg_from_arcgis_proj(arcgis_proj):
-    """
-    Extract espg code from arcgis proj
-    Args:
-        arcgis_proj () : Arcgis proj
-
-    Returns:
-        epsg_code : ndarray of the reclassified a raster
-    """
-    sr = arcpy.SpatialReference()
-    sr.loadFromString(arcgis_proj)
-    epsg_code = sr.factoryCode
-
-    return epsg_code
-
 
 def check_parameters(input_dict: dict) -> None:
     """
