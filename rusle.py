@@ -179,6 +179,7 @@ class LandcoverStructure(ListEnum):
     GL = "GlobeLand30 - China 2020 (30m)"
     P03 = "P03"
 
+
 def check_parameters(input_dict: dict) -> None:
     """
      Check if parameters values are valid
@@ -319,29 +320,35 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> XDS_TYPE:
 
     LOGGER.info("-- Produce C arable index over Europe --")
 
-    arable_c_dict = {
-        "Finland": 0.231,
-        'France': 0.20200000000,
-        'Germany': 0.20000000000,
-        'Greece': 0.28000000000,
-        'Hungary': 0.27500000000,
-        'Ireland': 0.20200000000,
-        'Italy': 0.21100000000,
-        'Latvia': 0.23700000000,
-        'Luxembourg': 0.21500000000,
-        'Malta': 0.43400000000,
-        'Netherlands': 0.26000000000,
-        'Poland': 0.24700000000,
-        'Portugal': 0.35200000000,
-        'Romania': 0.29600000000,
-        'Slovakia': 0.23500000000,
-        'Slovenia': 0.24800000000,
-        'Spain': 0.28900000000,
-        'Sweden': 0.23700000000,
-        'the former Yugoslav Republic of Macedonia': 0.25500000000,
-        'United Kingdom': 0.17700000000,
-        'Croatia': 0.25500000000
-    }
+    arable_c_dict = {'Austria': 0.21800000000,
+                     'Belgium': 0.24500000000,
+                     'Bulgaria': 0.18800000000,
+                     'Cyprus': 0.19300000000,
+                     'Czech Republic': 0.19900000000,
+                     'Croatia': 0.25500000000,
+                     'Germany': 0.200000000,
+                     'Denmark': 0.22200000000,
+                     'Estonia': 0.21700000000,
+                     'Spain': 0.28900000000,
+                     'Finland': 0.23100000000,
+                     'France': 0.20200000000,
+                     'Greece': 0.2800000000,
+                     'Hungary': 0.27500000000,
+                     'Ireland': 0.20200000000,
+                     'Italy': 0.21100000000,
+                     'Lithuania': 0.24200000000,
+                     'Luxembourg': 0.21500000000,
+                     'Latvia': 0.23700000000,
+                     'Malta': 0.43400000000,
+                     'Netherlands': 0.2600000000,
+                     'Poland': 0.24700000000,
+                     'Portugal': 0.35200000000,
+                     'Romania': 0.29600000000,
+                     'Sweden': 0.23700000000,
+                     'Slovenia': 0.24800000000,
+                     'Slovakia': 0.23500000000,
+                     'United Kingdom': 0.17700000000,
+                     'the former Yugoslav Republic of Macedonia': 0.25500000000}
 
     # -- Re project AOI to wgs84
     aoi = gpd.read_file(aoi_path)
@@ -1189,24 +1196,26 @@ def compute_rusle():
     }
 
     # input_dict = {
-    #     "aoi_path": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_aoi_32631.shp"),
+    #     "aoi_path": str(
+    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\AOI\EMSN158_STD_AOI01_MARIBORNORTH.shp"),
     #     "location": str("Europe"),
     #     "fcover_method": str("To be calculated"),
     #     "fcover_path": str(""),
     #     "nir_path": str(
-    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
+    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\S2A_MSIL1C_20230716T095031_N0509_R079_T33TWM_20230716T115307.SAFE\GRANULE\L1C_T33TWM_A042118_20230716T095032\IMG_DATA\T33TWM_20230716T095031_B10.jp2"),
     #     "red_path": str(
-    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B04_10m.jp2"),
+    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\S2A_MSIL1C_20230716T095031_N0509_R079_T33TWM_20230716T115307.SAFE\GRANULE\L1C_T33TWM_A042118_20230716T095032\IMG_DATA\T33TWM_20230716T095031_B04.jp2"),
     #     "landcover_name": str("Corine Land Cover - 2018 (100m)"),
     #     "p03_path": str(r""),
-    #     "del_path": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_del_32631.shp"),
+    #     "del_path": str(r""),
     #     "ls_method": str("To be calculated"),
     #     "ls_path": str(""),
-    #     "dem_name": str(r"EUDEM 25m"),
-    #     "other_dem_path": str(r""),
-    #     "output_resolution": int(5),
-    #     "ref_epsg": 32631,
-    #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\output")}
+    #     "dem_name": str(r"Other"),
+    #     "other_dem_path": str(
+    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\DEM\EMSN158_STD_AOI01_02_COPDEM_10m.tif"),
+    #     "output_resolution": int(10),
+    #     "ref_epsg": 32633,
+    #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\EMSN158")}
 
     # --- Import osm charter
     rusle_core(input_dict)
