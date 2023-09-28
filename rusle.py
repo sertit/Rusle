@@ -16,6 +16,8 @@ from enum import unique
 import argparse
 from sertit.files import to_abspath
 
+import sqlite3
+
 import numpy as np
 import xarray as xr
 import rasterio
@@ -26,7 +28,6 @@ from rasterstats import zonal_stats
 
 from sertit import strings, misc, rasters, files
 from sertit.misc import ListEnum
-from sertit.rasters import XDS_TYPE
 from sertit import logs
 
 from pysheds.grid import Grid
@@ -38,39 +39,39 @@ import arcpy
 import shapely
 from shapely import speedups
 
+import cloudpathlib
+from cloudpathlib import AnyPath
+
 np.seterr(divide='ignore', invalid='ignore')
 
 DEBUG = False
 LOGGING_FORMAT = '%(asctime)s - [%(levelname)s] - %(message)s'
 LOGGER = logging.getLogger("RUSLE")
 
-GLOBAL_DIR = os.path.join(r"\\ds2", "database02", "BASES_DE_DONNEES", "GLOBAL")
-WORLD_COUNTRIES_PATH = os.path.join(GLOBAL_DIR, "World_countries_poly", "world_countries_poly.shp")
-EUROPE_COUNTRIES_PATH = os.path.join(GLOBAL_DIR, "World_countries_poly", "europe_countries_poly.shp")
+GLOBAL_DIR = AnyPath(r"//ds2/database02/BASES_DE_DONNEES/GLOBAL")
+WORLD_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "world_countries_poly.shp"
+EUROPE_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "europe_countries_poly.shp"
 
-HWSD_PATH = os.path.join(GLOBAL_DIR, "FAO_Harmonized_World_Soil_Database", "hwsd.tif")
-DBFILE_PATH = os.path.join(GLOBAL_DIR, "FAO_Harmonized_World_Soil_Database", "HWSD.mdb")
+HWSD_PATH = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "hwsd.tif"
+DBFILE_PATH_SQL = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.db"
 
-R_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Rfactor", "Rf_gp1.tif")
+R_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Rfactor" / "Rf_gp1.tif"
 
-K_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Kfactor", "K_new_crop.tif")
-LS_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "LS_100m", "EU_LS_Mosaic_100m.tif")
-P_EURO_PATH = os.path.join(GLOBAL_DIR, "European_Soil_Database_v2", "Pfactor", "EU_PFactor_V2.tif")
+K_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
+LS_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "LS_100m" / "EU_LS_Mosaic_100m.tif"
+P_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Pfactor" / "EU_PFactor_V2.tif"
 
-CLC_PATH = os.path.join(GLOBAL_DIR, "Corine_Land_Cover", "CLC_2018", "clc2018_clc2018_v2018_20_raster100m",
-                        "CLC2018_CLC2018_V2018_20.tif")
-R_GLOBAL_PATH = os.path.join(GLOBAL_DIR, "Global_Rainfall_Erosivity", "GlobalR_NoPol.tif")
+CLC_PATH = GLOBAL_DIR / "Corine_Land_Cover" / "CLC_2018" / "clc2018_clc2018_v2018_20_raster100m" / "CLC2018_CLC2018_V2018_20.tif"
+R_GLOBAL_PATH = GLOBAL_DIR / "Global_Rainfall_Erosivity"/ "GlobalR_NoPol.tif"
 
-GLC_PATH = os.path.join(GLOBAL_DIR, "Global_Land_Cover", "2019",
-                        "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif")
+GLC_PATH = GLOBAL_DIR / "Global_Land_Cover" / "2019" / "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
 
-GC_PATH = os.path.join(GLOBAL_DIR, "Globcover_2009", "Globcover2009_V2.3_Global_",
-                       "GLOBCOVER_L4_200901_200912_V2.3.tif")
+GC_PATH = GLOBAL_DIR / "Globcover_2009" / "Globcover2009_V2.3_Global_" / "GLOBCOVER_L4_200901_200912_V2.3.tif"
 GL_PATH = ""  # To add
 
-EUDEM_PATH = os.path.join(GLOBAL_DIR, "EUDEM_v2", "eudem_dem_3035_europe.tif")
-SRTM30_PATH = os.path.join(GLOBAL_DIR, "SRTM_30m_v4", "index.vrt")
-MERIT_PATH = os.path.join(GLOBAL_DIR, "MERIT_Hydrologically_Adjusted_Elevations", "MERIT_DEM.vrt")
+EUDEM_PATH = GLOBAL_DIR / "EUDEM_v2" / "eudem_dem_3035_europe.tif"
+SRTM30_PATH = GLOBAL_DIR / "SRTM_30m_v4" / "index.vrt"
+MERIT_PATH = GLOBAL_DIR / "MERIT_Hydrologically_Adjusted_Elevations" / "MERIT_DEM.vrt"
 
 # Buffer apply to the AOI
 AOI_BUFFER = 5000
@@ -230,7 +231,7 @@ def check_parameters(input_dict: dict) -> None:
     return
 
 
-def norm_diff(xarr_1: XDS_TYPE, xarr_2: XDS_TYPE, new_name: str = "") -> XDS_TYPE:
+def norm_diff(xarr_1, xarr_2, new_name: str = ""):
     """
     Normalized difference
 
@@ -240,7 +241,7 @@ def norm_diff(xarr_1: XDS_TYPE, xarr_2: XDS_TYPE, new_name: str = "") -> XDS_TYP
         new_name (str): new name
 
     Returns:
-        XDS_TYPE: Normalized difference of the two bands with a new name
+        Normalized difference of the two bands with a new name
     """
     # Get data as np arrays
     band_1 = xarr_1.data
@@ -255,7 +256,7 @@ def norm_diff(xarr_1: XDS_TYPE, xarr_2: XDS_TYPE, new_name: str = "") -> XDS_TYP
 
 
 def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str, ref_crs: int,
-                   output_resolution: int) -> XDS_TYPE:
+                   output_resolution: int):
     """
     Produce the fcover index
     Args:
@@ -267,7 +268,7 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str, re
         output_resolution (int) : output resolution
 
     Returns:
-        XDS_TYPE : xarray of the fcover raster
+        xarray of the fcover raster
     """
     LOGGER.info("-- Produce the fcover index --")
 
@@ -307,7 +308,7 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str, re
     return fcover_xarr
 
 
-def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> XDS_TYPE:
+def produce_c_arable_europe(aoi_path: str, raster_xarr):
     """
     Produce C arable index over Europe
     Args:
@@ -379,7 +380,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr: XDS_TYPE) -> XDS_TYPE:
     return arable_c_xarr
 
 
-def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_name: str) -> XDS_TYPE:
+def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     """
     Produce C index
     Args:
@@ -517,7 +518,7 @@ def produce_c(lulc_xarr: XDS_TYPE, fcover_xarr: XDS_TYPE, aoi_path: str, lulc_na
     return arable_c_xarr.copy(data=c_arr)
 
 
-def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
+def produce_ls_factor(dem_path: str, tmp_dir: str):
     """
     Produce the LS factor raster
     Args:
@@ -600,7 +601,7 @@ def produce_ls_factor(dem_path: str, tmp_dir: str) -> XDS_TYPE:
     return slope_p_xarr.copy(data=ls_arr)
 
 
-def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
+def produce_k_outside_europe(aoi_path: str):
     """
     Produce the K index outside Europe
     Args:
@@ -619,7 +620,7 @@ def produce_k_outside_europe(aoi_path: str) -> XDS_TYPE:
     crop_hwsd_xarr = rasters.crop(HWSD_PATH, aoi_gdf)
 
     # -- Extract soil information from ce access DB
-    conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + DBFILE_PATH + ';')
+    conn = sqlite3.connect(DBFILE_PATH_SQL)
     cursor = conn.cursor()
     cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE, DRAINAGE FROM HWSD_DATA')
 
@@ -854,11 +855,11 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
     return out_dict
 
 
-def produce_a_arr(r_xarr: XDS_TYPE,
-                  k_xarr: XDS_TYPE,
-                  ls_xarr: XDS_TYPE,
-                  c_xarr: XDS_TYPE,
-                  p_xarr: XDS_TYPE) -> XDS_TYPE:
+def produce_a_arr(r_xarr,
+                  k_xarr,
+                  ls_xarr,
+                  c_xarr,
+                  p_xarr):
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
@@ -876,7 +877,7 @@ def produce_a_arr(r_xarr: XDS_TYPE,
     return r_xarr * k_xarr * ls_xarr * c_xarr  # * p_xarr  # TODO Check the Pfactor
 
 
-def produce_a_reclass_arr(a_xarr: XDS_TYPE) -> XDS_TYPE:
+def produce_a_reclass_arr(a_xarr):
     """
     Produce reclassified a
     Args:
@@ -1197,22 +1198,21 @@ def compute_rusle():
 
     # input_dict = {
     #     "aoi_path": str(
-    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\AOI\EMSN158_STD_AOI01_MARIBORNORTH.shp"),
-    #     "location": str("Europe"),
+    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_aoi_32631.shp"),
+    #     "location": str("Global"),
     #     "fcover_method": str("To be calculated"),
     #     "fcover_path": str(""),
     #     "nir_path": str(
-    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\S2A_MSIL1C_20230716T095031_N0509_R079_T33TWM_20230716T115307.SAFE\GRANULE\L1C_T33TWM_A042118_20230716T095032\IMG_DATA\T33TWM_20230716T095031_B10.jp2"),
+    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
     #     "red_path": str(
-    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\S2A_MSIL1C_20230716T095031_N0509_R079_T33TWM_20230716T115307.SAFE\GRANULE\L1C_T33TWM_A042118_20230716T095032\IMG_DATA\T33TWM_20230716T095031_B04.jp2"),
+    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
     #     "landcover_name": str("Corine Land Cover - 2018 (100m)"),
     #     "p03_path": str(r""),
     #     "del_path": str(r""),
     #     "ls_method": str("To be calculated"),
     #     "ls_path": str(""),
-    #     "dem_name": str(r"Other"),
-    #     "other_dem_path": str(
-    #         r"\\ds2\database03\PROJET_EN_COURS_v2\CEMS_RRM_2019_Activations\EMSN158_Landslide_Slovenia_STD\DATA\DEM\EMSN158_STD_AOI01_02_COPDEM_10m.tif"),
+    #     "dem_name": str(r"SRTM 30m"),
+    #     "other_dem_path": str(""),
     #     "output_resolution": int(10),
     #     "ref_epsg": 32633,
     #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\EMSN158")}
