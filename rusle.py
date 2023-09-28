@@ -7,7 +7,7 @@ __author__ = "Ledauphin Thomas"
 __contact__ = "tledauphin@unistra.fr"
 __python__ = "3.7.0"
 __created__ = "24/02/2021"
-__update__ = "14/03/2023"
+__update__ = "28/09/2023"
 __copyrights__ = "(c) SERTIT 2021"
 
 import os
@@ -62,7 +62,7 @@ LS_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "LS_100m" / "EU_LS_Mos
 P_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Pfactor" / "EU_PFactor_V2.tif"
 
 CLC_PATH = GLOBAL_DIR / "Corine_Land_Cover" / "CLC_2018" / "clc2018_clc2018_v2018_20_raster100m" / "CLC2018_CLC2018_V2018_20.tif"
-R_GLOBAL_PATH = GLOBAL_DIR / "Global_Rainfall_Erosivity"/ "GlobalR_NoPol.tif"
+R_GLOBAL_PATH = GLOBAL_DIR / "Global_Rainfall_Erosivity" / "GlobalR_NoPol.tif"
 
 GLC_PATH = GLOBAL_DIR / "Global_Land_Cover" / "2019" / "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
 
@@ -236,8 +236,8 @@ def norm_diff(xarr_1, xarr_2, new_name: str = ""):
     Normalized difference
 
     Args:
-        xarr_1 (XDS_TYPE): xarray of band 1
-        xarr_2 (XDS_TYPE): xarray of band 2
+        xarr_1 : xarray of band 1
+        xarr_2 : xarray of band 2
         new_name (str): new name
 
     Returns:
@@ -313,10 +313,10 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
     Produce C arable index over Europe
     Args:
         aoi_path (str): aoi path
-        raster_xarr (XDS_TYPE): lulc xarray
+        raster_xarr : lulc xarray
 
     Returns:
-        XDS_TYPE : xarray of the c arable raster
+        xarray of the c arable raster
     """
 
     LOGGER.info("-- Produce C arable index over Europe --")
@@ -384,13 +384,13 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     """
     Produce C index
     Args:
-        lulc_xarr (XDS_TYPE): lulc xarray
-        fcover_xarr (XDS_TYPE):fcover xarray
+        lulc_xarr : lulc xarray
+        fcover_xarr :fcover xarray
         aoi_path (str): aoi path
         lulc_name (str) : name of the LULC
 
     Returns:
-        XDS_TYPE : xdarray of the c index raster
+        xdarray of the c index raster
     """
     LOGGER.info("-- Produce C index --")
     print(lulc_name)
@@ -526,7 +526,7 @@ def produce_ls_factor(dem_path: str, tmp_dir: str):
         tmp_dir (str) : tmp dir path
 
     Returns:
-        XDS_TYPE : xarray of the ls factor raster
+        xarray of the ls factor raster
     """
 
     # -- Compute D8 flow directions
@@ -608,7 +608,7 @@ def produce_k_outside_europe(aoi_path: str):
         aoi_path (str) : AOI path
 
     Returns:
-        XDS_TYPE : xarray of the K raster
+        xarray of the K raster
     """
 
     LOGGER.info("-- Produce the K index outside Europe --")
@@ -863,14 +863,14 @@ def produce_a_arr(r_xarr,
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
-        r_xarr (XDS_TYPE): multi-annual average index xarray
-        k_xarr (XDS_TYPE): susceptibility of a soil to erode xarray
-        ls_xarr (XDS_TYPE) :combined Slope Length and Slope Steepness factor xarray
-        c_xarr (XDS_TYPE) : Cover management factor xarray
-        p_xarr (XDS_TYPE) : support practices factor xarray
+        r_xarr : multi-annual average index xarray
+        k_xarr : susceptibility of a soil to erode xarray
+        ls_xarr  :combined Slope Length and Slope Steepness factor xarray
+        c_xarr  : Cover management factor xarray
+        p_xarr  : support practices factor xarray
 
     Returns:
-        XDS_TYPE : xarray of the average annual soil loss (ton/ha/year)
+        xarray of the average annual soil loss (ton/ha/year)
     """
     LOGGER.info("-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --")
 
@@ -881,10 +881,10 @@ def produce_a_reclass_arr(a_xarr):
     """
     Produce reclassified a
     Args:
-        a_xarr (XDS_TYPE) : a xarray
+        a_xarr : a xarray
 
     Returns:
-        XDS_TYPE : xarray of the reclassified a raster
+        xarray of the reclassified a raster
     """
 
     LOGGER.info("-- Produce the reclassified a --")
