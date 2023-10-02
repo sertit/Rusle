@@ -581,9 +581,9 @@ def produce_ls_factor(dem_path: str, tmp_dir: str):
 
     # -- m calculation
     conditions = [slope_p_xarr < 1,
-                  (slope_p_xarr >= 1) & (slope_p_xarr > 3),
-                  (slope_p_xarr >= 3) & (slope_p_xarr > 5),
-                  (slope_p_xarr >= 5) & (slope_p_xarr > 12),
+                  (slope_p_xarr >= 1) & (slope_p_xarr < 3),
+                  (slope_p_xarr >= 3) & (slope_p_xarr < 5),
+                  (slope_p_xarr >= 5) & (slope_p_xarr < 12),
                   slope_p_xarr >= 12]
     choices = [0.2, 0.3, 0.4, 0.5, 0.6]
     m = np.select(conditions, choices, default=np.nan)
