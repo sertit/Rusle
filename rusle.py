@@ -12,8 +12,11 @@ __copyrights__ = "(c) SERTIT 2021"
 
 import os
 import logging
+import sqlite3
 from enum import unique
 import argparse
+
+import cloudpathlib
 from sertit.files import to_abspath
 
 import sqlite3
@@ -26,21 +29,13 @@ from rasterio.enums import Resampling
 import geopandas as gpd
 from rasterstats import zonal_stats
 
-from sertit import strings, misc, rasters, files
+from sertit import strings, misc, rasters, files, vectors
 from sertit.misc import ListEnum
 from sertit import logs
 
 from pysheds.grid import Grid
-
-import pyodbc
-import pyproj
-
-import arcpy
-import shapely
-from shapely import speedups
-
-import cloudpathlib
-from cloudpathlib import AnyPath
+from sertit.unistra import get_geodatastore, s3_env
+import sys
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -48,11 +43,12 @@ DEBUG = False
 LOGGING_FORMAT = '%(asctime)s - [%(levelname)s] - %(message)s'
 LOGGER = logging.getLogger("RUSLE")
 
-GLOBAL_DIR = AnyPath(r"//ds2/database02/BASES_DE_DONNEES/GLOBAL")
+GLOBAL_DIR = get_geodatastore() / "GLOBAL"
 WORLD_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "world_countries_poly.shp"
 EUROPE_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "europe_countries_poly.shp"
 
 HWSD_PATH = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "hwsd.tif"
+DBFILE_PATH = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.mdb"
 DBFILE_PATH_SQL = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.db"
 
 R_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Rfactor" / "Rf_gp1.tif"
@@ -358,7 +354,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
         aoi = aoi.to_crs(crs_4326)
 
     # -- Extract europe countries
-    world_countries = gpd.read_file(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
+    world_countries = vectors.read(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # -- Initialize arable arr
@@ -620,7 +616,10 @@ def produce_k_outside_europe(aoi_path: str):
     crop_hwsd_xarr = rasters.crop(HWSD_PATH, aoi_gdf)
 
     # -- Extract soil information from ce access DB
-    conn = sqlite3.connect(DBFILE_PATH_SQL)
+    raw_db_file_path = DBFILE_PATH_SQL
+    if isinstance(DBFILE_PATH_SQL, cloudpathlib.CloudPath):
+        raw_db_file_path = DBFILE_PATH_SQL.fspath
+    conn = sqlite3.connect(raw_db_file_path)
     cursor = conn.cursor()
     cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE, DRAINAGE FROM HWSD_DATA')
 
@@ -780,7 +779,6 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
     return raster_dict
 
-
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
     """
@@ -902,7 +900,6 @@ def produce_a_reclass_arr(a_xarr):
     a_reclass_arr = np.select(conditions, choices, default=np.nan)
 
     return a_xarr.copy(data=a_reclass_arr)
-
 
 def rusle_core(input_dict: dict) -> None:
     """
@@ -1086,7 +1083,7 @@ def rusle_core(input_dict: dict) -> None:
 
     return
 
-
+@s3_env
 def compute_rusle():
     """
     Import osm charter with the CLI.
