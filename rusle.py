@@ -36,6 +36,9 @@ from sertit import logs
 from pysheds.grid import Grid
 from sertit.unistra import get_geodatastore, s3_env
 import sys
+from eoreader.reader import Reader
+from eoreader.bands import NIR, RED
+import xarray
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -113,6 +116,7 @@ class InputParameters(ListEnum):
     FCOVER_PATH = "fcover_path"
     NIR_PATH = "nir_path"
     RED_PATH = "red_path"
+    SATELLITE_PRODUCT_PATH = "satellite_product_path"
     LANDCOVER_NAME = "landcover_name"
     P03_PATH = "p03_path"
     DEL_PATH = "del_path"
@@ -272,10 +276,16 @@ def produce_fcover(red_path: str, nir_path: str, aoi_path: str, tmp_dir: str, re
     aoi_gdf = gpd.read_file(aoi_path)
 
     # -- Read RED
-    red_xarr = rasters.read(red_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
+    if isinstance(red_path, xarray.DataArray):
+        red_xarr = red_path
+    else:
+        red_xarr = rasters.read(red_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Read NIR
-    nir_xarr = rasters.read(nir_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
+    if isinstance(nir_path, xarray.DataArray):
+        nir_xarr = nir_path
+    else:
+        nir_xarr = rasters.read(nir_path, window=aoi_gdf).astype(np.float32)  # No need to normalize, only used in NDVI
 
     # -- Process NDVI
     ndvi_xarr = norm_diff(nir_xarr, red_xarr, new_name="NDVI")
@@ -692,7 +702,7 @@ def produce_k_outside_europe(aoi_path: str):
 
 def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     """
-    Make a dict with th raster to pre process from the input dict
+    Make a dict with the raster images to pre process from the input dict
     Args:
         input_dict (dict) : Dict that store parameters values
 
@@ -707,6 +717,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
     nir_path = input_dict.get(InputParameters.NIR_PATH.value)
     red_path = input_dict.get(InputParameters.RED_PATH.value)
+    satellite_product_path = input_dict.get(InputParameters.SATELLITE_PRODUCT_PATH.value)
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     p03_path = input_dict.get(InputParameters.P03_PATH.value)
     ls_method = input_dict.get(InputParameters.LS_METHOD.value)
@@ -745,8 +756,16 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
         # -- Add bands to the pre process dict if fcover need to be calculated or not
         if fcover_method == MethodType.TO_BE_CALCULATED.value:
-            raster_dict["red"] = [red_path, Resampling.bilinear]
-            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+            if satellite_product_path is not None:
+                prod = Reader().open(satellite_product_path)
+                bands = prod.load([NIR, RED], window=aoi_path)
+                red = bands[RED]
+                nir = bands[NIR]
+                raster_dict["red"] = [red, Resampling.bilinear]
+                raster_dict["nir"] = [nir, Resampling.bilinear]
+            else:
+                raster_dict["red"] = [red_path, Resampling.bilinear]
+                raster_dict["nir"] = [nir_path, Resampling.bilinear]
         elif fcover_method == MethodType.ALREADY_PROVIDED.value:
             raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
 
@@ -770,8 +789,16 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
         # -- Add bands to the pre process dict if fcover need to be calculated or not
         if fcover_method == MethodType.TO_BE_CALCULATED.value:
-            raster_dict["red"] = [red_path, Resampling.bilinear]
-            raster_dict["nir"] = [nir_path, Resampling.bilinear]
+            if satellite_product_path is not None:
+                prod = Reader().open(satellite_product_path)
+                bands = prod.load([NIR, RED], window=aoi_path)
+                red = bands[RED]
+                nir = bands[NIR]
+                raster_dict["red"] = [red, Resampling.bilinear]
+                raster_dict["nir"] = [nir, Resampling.bilinear]
+            else:
+                raster_dict["red"] = [red_path, Resampling.bilinear]
+                raster_dict["nir"] = [nir_path, Resampling.bilinear]
         elif fcover_method == MethodType.ALREADY_PROVIDED.value:
             raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
     else:
@@ -812,7 +839,10 @@ def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, rast
         aoi_gdf = gpd.read_file(aoi_path)
 
         # -- Read raster
-        raster_xarr = rasters.read(raster_path, window=aoi_gdf)
+        if isinstance(raster_path, xarray.DataArray):
+            raster_xarr = raster_path
+        else:
+            raster_xarr = rasters.read(raster_path, window=aoi_gdf)
 
         # -- Add path to the dictionary
         if ref_xarr is None:
@@ -1121,6 +1151,10 @@ def compute_rusle():
                         help="RED band path if Fcover is To be calculated",
                         type=to_abspath)
 
+    parser.add_argument("--satellite_product_path", "--sat_product_path",
+                        help="Path to a satellite product with at least the Nir and Red bands",
+                        type=to_abspath)
+
     parser.add_argument("-lulc", "--landcover_name",
                         help="Land Cover Name",
                         choices=['Corine Land Cover - 2018 (100m)', 'Global Land Cover - Copernicus 2020 (100m)',
@@ -1181,6 +1215,7 @@ def compute_rusle():
         InputParameters.FCOVER_PATH.value: args.fcover_path,
         InputParameters.NIR_PATH.value: args.nir_path,
         InputParameters.RED_PATH.value: args.red_path,
+        InputParameters.SATELLITE_PRODUCT_PATH.value: args.satellite_product_path,
         InputParameters.LANDCOVER_NAME.value: args.landcover_name,
         InputParameters.P03_PATH.value: args.p03_path,
         InputParameters.DEL_PATH.value: args.del_path,
