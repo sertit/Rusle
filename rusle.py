@@ -46,34 +46,56 @@ DEBUG = False
 LOGGING_FORMAT = '%(asctime)s - [%(levelname)s] - %(message)s'
 LOGGER = logging.getLogger("RUSLE")
 
-GLOBAL_DIR = get_geodatastore() / "GLOBAL"
-WORLD_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "world_countries_poly.shp"
-EUROPE_COUNTRIES_PATH = GLOBAL_DIR / "World_countries_poly" / "europe_countries_poly.shp"
 
-HWSD_PATH = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "hwsd.tif"
-DBFILE_PATH = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.mdb"
-DBFILE_PATH_SQL = GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.db"
+def geodatastore(ftep=False):
+    """
+    This function returns the root path to the geo data store (DEM, Soil database...).
+    Args:
+        ftep: If True, the path to the s3 bucket for the ftep platform is returned. Else, get_geodatastore from sertit utils module is called.
 
-R_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Rfactor" / "Rf_gp1.tif"
+    Returns:
+        The path to the geo data store.
 
-K_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
-LS_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "LS_100m" / "EU_LS_Mosaic_100m.tif"
-P_EURO_PATH = GLOBAL_DIR / "European_Soil_Database_v2" / "Pfactor" / "EU_PFactor_V2.tif"
+    """
+    if ftep:
+        return "s2://eo4sdg-data/rusle"
+    else:
+        return get_geodatastore()
 
-CLC_PATH = GLOBAL_DIR / "Corine_Land_Cover" / "CLC_2018" / "clc2018_clc2018_v2018_20_raster100m" / "CLC2018_CLC2018_V2018_20.tif"
-R_GLOBAL_PATH = GLOBAL_DIR / "Global_Rainfall_Erosivity" / "GlobalR_NoPol.tif"
 
-GLC_PATH = GLOBAL_DIR / "Global_Land_Cover" / "2019" / "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
+class DataPath:
+    GLOBAL_DIR = None
 
-GC_PATH = GLOBAL_DIR / "Globcover_2009" / "Globcover2009_V2.3_Global_" / "GLOBCOVER_L4_200901_200912_V2.3.tif"
-GL_PATH = ""  # To add
+    @classmethod
+    def load_paths(cls, ftep=False):
+        cls.GLOBAL_DIR = geodatastore() / "GLOBAL"
+        cls.WORLD_COUNTRIES_PATH = cls.GLOBAL_DIR / "World_countries_poly" / "world_countries_poly.shp"
+        cls.EUROPE_COUNTRIES_PATH = cls.GLOBAL_DIR / "World_countries_poly" / "europe_countries_poly.shp"
 
-EUDEM_PATH = GLOBAL_DIR / "EUDEM_v2" / "eudem_dem_3035_europe.tif"
-SRTM30_PATH = GLOBAL_DIR / "SRTM_30m_v4" / "index.vrt"
-MERIT_PATH = GLOBAL_DIR / "MERIT_Hydrologically_Adjusted_Elevations" / "MERIT_DEM.vrt"
+        cls.HWSD_PATH = cls.GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "hwsd.tif"
+        cls.DBFILE_PATH = cls.GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.mdb"
+        cls.DBFILE_PATH_SQL = cls.GLOBAL_DIR / "FAO_Harmonized_World_Soil_Database" / "HWSD.db"
 
-# Buffer apply to the AOI
-AOI_BUFFER = 5000
+        cls.R_EURO_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Rfactor" / "Rf_gp1.tif"
+
+        cls.K_EURO_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
+        cls.LS_EURO_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "LS_100m" / "EU_LS_Mosaic_100m.tif"
+        cls.P_EURO_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Pfactor" / "EU_PFactor_V2.tif"
+
+        cls.CLC_PATH = cls.GLOBAL_DIR / "Corine_Land_Cover" / "CLC_2018" / "clc2018_clc2018_v2018_20_raster100m" / "CLC2018_CLC2018_V2018_20.tif"
+        cls.R_GLOBAL_PATH = cls.GLOBAL_DIR / "Global_Rainfall_Erosivity" / "GlobalR_NoPol.tif"
+
+        cls.GLC_PATH = cls.GLOBAL_DIR / "Global_Land_Cover" / "2019" / "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
+
+        cls.GC_PATH = cls.GLOBAL_DIR / "Globcover_2009" / "Globcover2009_V2.3_Global_" / "GLOBCOVER_L4_200901_200912_V2.3.tif"
+        cls.GL_PATH = ""  # To add
+
+        cls.EUDEM_PATH = cls.GLOBAL_DIR / "EUDEM_v2" / "eudem_dem_3035_europe.tif"
+        cls.SRTM30_PATH = cls.GLOBAL_DIR / "SRTM_30m_v4" / "index.vrt"
+        cls.MERIT_PATH = cls.GLOBAL_DIR / "MERIT_Hydrologically_Adjusted_Elevations" / "MERIT_DEM.vrt"
+
+    # Buffer apply to the AOI
+    AOI_BUFFER = 5000
 
 
 class ArcPyLogHandler(logging.handlers.RotatingFileHandler):
@@ -364,7 +386,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
         aoi = aoi.to_crs(crs_4326)
 
     # -- Extract europe countries
-    world_countries = vectors.read(WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
+    world_countries = vectors.read(DataPath.WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
     europe_countries = world_countries[world_countries['CONTINENT'] == 'Europe']
 
     # -- Initialize arable arr
@@ -623,12 +645,12 @@ def produce_k_outside_europe(aoi_path: str):
     aoi_gdf = gpd.read_file(aoi_path)
 
     # -- Crop hwsd
-    crop_hwsd_xarr = rasters.crop(HWSD_PATH, aoi_gdf)
+    crop_hwsd_xarr = rasters.crop(DataPath.HWSD_PATH, aoi_gdf)
 
     # -- Extract soil information from ce access DB
-    raw_db_file_path = DBFILE_PATH_SQL
-    if isinstance(DBFILE_PATH_SQL, cloudpathlib.CloudPath):
-        raw_db_file_path = DBFILE_PATH_SQL.fspath
+    raw_db_file_path = DataPath.DBFILE_PATH_SQL
+    if isinstance(DataPath.DBFILE_PATH_SQL, cloudpathlib.CloudPath):
+        raw_db_file_path = DataPath.DBFILE_PATH_SQL.fspath
     conn = sqlite3.connect(raw_db_file_path)
     cursor = conn.cursor()
     cursor.execute('SELECT id, S_SILT, S_CLAY, S_SAND, T_OC, T_TEXTURE, DRAINAGE FROM HWSD_DATA')
@@ -730,8 +752,8 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         os.makedirs(tmp_dir)
 
     # -- Dict that store landcover name and landcover path
-    landcover_path_dict = {LandcoverType.CLC.value: CLC_PATH,
-                           LandcoverType.GLC.value: GLC_PATH,
+    landcover_path_dict = {LandcoverType.CLC.value: DataPath.CLC_PATH,
+                           LandcoverType.GLC.value: DataPath.GLC_PATH,
                            # LandcoverType.GC.value: GC_PATH,
                            # LandcoverType.GL.value: GL_PATH,
                            LandcoverType.P03.value: p03_path
@@ -744,10 +766,10 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     if location == LocationType.EUROPE.value:
 
         # -- Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"r": [R_EURO_PATH, Resampling.bilinear],
-                       "k": [K_EURO_PATH, Resampling.bilinear],
+        raster_dict = {"r": [DataPath.R_EURO_PATH, Resampling.bilinear],
+                       "k": [DataPath.K_EURO_PATH, Resampling.bilinear],
                        "lulc": [lulc_path, Resampling.nearest],
-                       "p": [P_EURO_PATH, Resampling.bilinear]
+                       "p": [DataPath.P_EURO_PATH, Resampling.bilinear]
                        }
 
         # -- Add the ls raster to the pre process dict if provided
@@ -778,7 +800,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         rasters.write(k_xarr, k_path)  # , nodata=0)
 
         # -- Dict that store raster to pre_process and the type of resampling
-        raster_dict = {"r": [R_GLOBAL_PATH, Resampling.bilinear],
+        raster_dict = {"r": [DataPath.R_GLOBAL_PATH, Resampling.bilinear],
                        "lulc": [lulc_path, Resampling.nearest],
                        "k": [k_path, Resampling.nearest]
                        }
@@ -805,6 +827,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         raise ValueError(f"Unknown Location Type: {location}")
 
     return raster_dict
+
 
 def raster_pre_processing(aoi_path: str, dst_resolution: int, dst_crs: CRS, raster_path_dict: dict,
                           tmp_dir: str) -> dict:
@@ -931,6 +954,7 @@ def produce_a_reclass_arr(a_xarr):
 
     return a_xarr.copy(data=a_reclass_arr)
 
+
 def rusle_core(input_dict: dict) -> None:
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
@@ -967,7 +991,7 @@ def rusle_core(input_dict: dict) -> None:
     # - Reproject aoi
     aoi_gdf = aoi_gdf.to_crs(ref_epsg)
     # - Apply buffer
-    aoi_gdf.geometry = aoi_gdf.geometry.buffer(AOI_BUFFER)
+    aoi_gdf.geometry = aoi_gdf.geometry.buffer(DataPath.AOI_BUFFER)
 
     # Export the new aoi
     aoi_path = os.path.join(tmp_dir, "aoi_buff5.shp")
@@ -995,9 +1019,9 @@ def rusle_core(input_dict: dict) -> None:
     # -- Check if ls need to be calculated or not
     if ls_method == MethodType.TO_BE_CALCULATED.value:
         # -- Dict that store dem_name with path
-        dem_dict = {DemType.EUDEM.value: EUDEM_PATH,
-                    DemType.SRTM.value: SRTM30_PATH,
-                    DemType.MERIT.value: MERIT_PATH,
+        dem_dict = {DemType.EUDEM.value: DataPath.EUDEM_PATH,
+                    DemType.SRTM.value: DataPath.SRTM30_PATH,
+                    DemType.MERIT.value: DataPath.MERIT_PATH,
                     DemType.OTHER.value: other_dem_path
                     }
 
@@ -1113,6 +1137,7 @@ def rusle_core(input_dict: dict) -> None:
 
     return
 
+
 @s3_env
 def compute_rusle():
     """
@@ -1227,6 +1252,7 @@ def compute_rusle():
         InputParameters.REF_EPSG.value: args.epsg_code,
         InputParameters.OUTPUT_DIR.value: args.output
     }
+    DataPath.load_path()
 
     # input_dict = {
     #     "aoi_path": str(
@@ -1250,6 +1276,7 @@ def compute_rusle():
     #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\EMSN158")}
 
     # --- Import osm charter
+    print(DataPath.GLOBAL_DIR, DataPath.WORLD_COUNTRIES_PATH)
     rusle_core(input_dict)
 
 
