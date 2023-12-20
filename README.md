@@ -58,7 +58,7 @@ Can be :
 
 **Output folder** : Output folder
 
-![Arcgis  pro toolbox](static/Arcgis_pro_Toolbox.PNG)
+![Arcgis  pro toolbox](Arcgis_pro_Toolbox.PNG)
 
 
 ## CLI
@@ -109,4 +109,3 @@ cd D:\RUSLE\
 conda activate arcgispro-eo
 python .\rusle.py -aoi D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_aoi_32631.shp -loc "Europe" -fc "To be calculated" -nir D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2 -red D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B04_10m.jp2 -lulc "Corine Land Cover - 2018 (100m)" -del D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_del_32631.shp -ls "To be calculated" -dem "EUDEM 25m" -res 10 -epsg 32631 -o D:\TLedauphin\02_Temp_traitement\test_rusle\output
 ```
-

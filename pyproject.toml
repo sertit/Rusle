@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["rusle*"]
+
+[tool.setuptools.package-data]
+rusle = ["esri/help/gp/messages/*.xml", "esri/help/gp/toolboxes/*.xml", "esri/arcpy/*.xml", "esri/toolboxes/*.pyt"]
+
+[project]
+name = "rusle"
+authors = [
+    {name = "ICube-SERTIT", email = "dev-sertit@unistra.fr"},
+]
+description = "SERTIT python project"
+readme = "README.md"
+
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Operating System :: OS Independent",
+]
+version = "1.0.0"
+
+dependencies = [
+    # Libs for all platforms
+    "pysheds",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Tests & lint
+    "pre-commit",
+    "black",
+    "flake8",
+    "tempenv",
+    ]
+
+# compatibility black and isort
+[tool.isort]
+profile = "black"
+known_first_party = ["ci"]
+
+[project.scripts]
+rusle = "rusle.rusle_cli:compute_rusle"
