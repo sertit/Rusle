@@ -274,6 +274,10 @@ class Rusle(object):
     def execute(self, parameters, messages):
         """The source code of the tool."""
 
+        tools_path = str(pathlib.Path(__file__).parent.parent.parent.absolute())
+        if tools_path not in sys.path:
+            sys.path.append(tools_path)
+
         import logging.handlers
         import arcpy
 
