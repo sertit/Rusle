@@ -1,0 +1,13 @@
+stages:
+  - deploy
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  EO_CONTAINER: $REGISTRY_GITLAB/eo-containers
+
+deploy:
+  variables:
+    PROJECT_PATH: $CI_PROJECT_PATH
+    PROJECT_ROOT: "rusle"
+  stage: deploy
+  trigger: sertit/arcgis-pro/sertit_atools
