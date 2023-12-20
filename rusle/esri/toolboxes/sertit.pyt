@@ -8,7 +8,6 @@ tools_path = pathlib.Path(__file__).parent.parent.parent.absolute()
 if tools_path not in sys.path:
     sys.path.append(str(tools_path))
 
-# A random comment to be sure
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
