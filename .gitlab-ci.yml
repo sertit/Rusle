@@ -11,3 +11,11 @@ deploy:
     PROJECT_ROOT: "rusle"
   stage: deploy
   trigger: sertit/arcgis-pro/sertit_atools
+  rules:
+    # Deploy only if changes happened in the default branch
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    # On other branch, ask the user
+    - if: $CI_COMMIT_REF_NAME != $CI_DEFAULT_BRANCH
+      when: manual
+
+
