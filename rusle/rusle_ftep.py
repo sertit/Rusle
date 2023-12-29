@@ -1,16 +1,21 @@
 import os
 
-from main import rusle_core, InputParameters, DataPath
 import ftep_util as ftep
 import logging.handlers
+from sertit import AnyPath, s3
+import sys
 
 DEBUG = False
 LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
 LOGGER = logging.getLogger("OSM Charter")
 
-if __name__ == "__main__":
-    logger = logging.getLogger("RUSLE")
-    logger.setLevel(logging.DEBUG)
+
+FTEP_S3_ENDPOINT = "s3.waw2-1.cloudferro.com"
+def ftep_s3_env(*args, **kwargs):
+    return s3.s3_env(endpoint=FTEP_S3_ENDPOINT)(*args, **kwargs)
+
+@ftep_s3_env
+def compute_rusle():
 
     parameters_file_path = "/home/worker/workDir/FTEP-WPS-INPUT.properties"
     # Default parameter values
@@ -22,7 +27,7 @@ if __name__ == "__main__":
     # Load inputs
     satellite_product_path = "/home/worker/workDir/inDir/satellite_product_path/"
     satellite_product_path = (
-        satellite_product_path + os.listdir(satellite_product_path)[0]
+            satellite_product_path + os.listdir(satellite_product_path)[0]
     )
     aoi_path = "/home/worker/workDir/inDir/aoi_path/"
 
@@ -34,6 +39,12 @@ if __name__ == "__main__":
                 aoi_path = aoi_path + path
     else:
         aoi_path = aoi_path + os.listdir(sub_aoi_files)[0]
+
+    from sertit import logs
+    from rusle.rusle_core import LOGGER, LOGGING_FORMAT, rusle_core, InputParameters, DataPath
+
+    logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
+    LOGGER.info("--- RUSLE ---")
 
     input_dict = {
         InputParameters.AOI_PATH.value: aoi_path,
@@ -59,10 +70,13 @@ if __name__ == "__main__":
     try:
         # Compute RUSLE charter
         rusle_core(input_dict)
-
         LOGGER.info("--- RUSLE was a success.")
+        sys.exit(0)
 
     except Exception as ex:
-        import traceback
+        LOGGER.error("RUSLE has failed:", exc_info=True)
+        sys.exit(1)
 
-        logger.error("RUSLE has failed: %s", traceback.format_exc())
+
+if __name__ == "__main__":
+    compute_rusle()

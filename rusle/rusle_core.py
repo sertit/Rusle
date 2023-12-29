@@ -12,12 +12,9 @@ __copyrights__ = "(c) SERTIT 2021"
 
 import os
 import logging
-import sqlite3
 from enum import unique
-import argparse
 
 import cloudpathlib
-from sertit.files import to_abspath
 
 import sqlite3
 
@@ -29,13 +26,11 @@ from rasterio.enums import Resampling
 import geopandas as gpd
 from rasterstats import zonal_stats
 
-from sertit import strings, misc, rasters, files, vectors
+from sertit import strings, misc, rasters, files, vectors, AnyPath
 from sertit.misc import ListEnum
-from sertit import logs
 
 from pysheds.grid import Grid
 from sertit.unistra import get_geodatastore, s3_env
-import sys
 from eoreader.reader import Reader
 from eoreader.bands import NIR, RED
 import xarray
@@ -58,7 +53,7 @@ def geodatastore(ftep=False):
 
     """
     if ftep:
-        return "s2://eo4sdg-data/rusle"
+        return AnyPath("s3://eo4sdg-data")
     else:
         return get_geodatastore()
 
@@ -68,7 +63,7 @@ class DataPath:
 
     @classmethod
     def load_paths(cls, ftep=False):
-        cls.GLOBAL_DIR = geodatastore() / "GLOBAL"
+        cls.GLOBAL_DIR = geodatastore(ftep) / "GLOBAL"
         cls.WORLD_COUNTRIES_PATH = (
             cls.GLOBAL_DIR / "World_countries_poly" / "world_countries_poly.shp"
         )

@@ -1,9 +1,13 @@
+"""
+The rusle CLI will fail if you called this file directly. Call the root file rusle.py.
+"""
+
 import logging
 import argparse
-from sertit.files import to_abspath
-from sertit import logs
-from sertit.unistra import get_geodatastore, s3_env
 import sys
+from sertit import logs
+from sertit.files import to_abspath
+from sertit.unistra import s3_env
 
 
 @s3_env
@@ -142,7 +146,7 @@ def compute_rusle():
     # Parse args
     args = parser.parse_args()
 
-    from rusle.main import InputParameters, DataPath, rusle_core, LOGGER, LOGGING_FORMAT
+    from rusle.rusle_core import InputParameters, DataPath, rusle_core, LOGGER, LOGGING_FORMAT
 
     logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
     LOGGER.info("--- RUSLE ---")
