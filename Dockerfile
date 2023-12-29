@@ -1,6 +1,5 @@
 FROM registry.app.unistra.fr/sertit/eo-containers:geo_sertit_latest
 
-
 MAINTAINER Bastien Coriat
 RUN pip install pysheds
 ENV AWS_ACCESS_KEY_ID=***REMOVED***
@@ -15,6 +14,7 @@ RUN wget https://f-tep.com/sites/default/files/pythonapi/ftep_api-0.0.16-py3-non
     && rm -f ftep_api-0.0.16-py3-none-any.whl ftep_util-0.0.8-py3-none-any.whl
 
 RUN pip install numpy==1.25.2
+RUN pip install --index-url https://__token__:glpat-xypsdgKBaMHiRvqraGj1@git.unistra.fr/api/v4/projects/26129/packages/pypi/simple rusle
 
 # Prepare processor script
 RUN mkdir -p /home/worker/processor
