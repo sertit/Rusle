@@ -64,7 +64,7 @@ Can be :
 ## CLI
 This tool is also usable by command line:
 ```shell
-rusle.py [-h] -aoi AOI_PATH -loc {Europe,Global} -fc {Already provided,To be calculated} [-fcp FCOVER_PATH] [-nir NIR_PATH] [-red RED_PATH] -lulc {Corine Land Cover - 2018 100m),Global Land Cover - Copernicus 2020 (100m,P03}
+rusle_core.py [-h] -aoi AOI_PATH -loc {Europe,Global} -fc {Already provided,To be calculated} [-fcp FCOVER_PATH] [-nir NIR_PATH] [-red RED_PATH] -lulc {Corine Land Cover - 2018 100m),Global Land Cover - Copernicus 2020 (100m,P03}
                 [-p03 P03_PATH] [-del DEL_PATH] -ls {Already provided,To be calculated} [-lsp LS_PATH] [-dem {EUDEM 25m,SRTM 30m,MERIT 5 deg,Other}] [-demp OTHER_DEM_PATH] -res OUTPUT_RESOLUTION -epsg EPSG_CODE -o OUTPUT
 
 optional arguments:
