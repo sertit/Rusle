@@ -9,14 +9,15 @@ DEBUG = False
 LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
 LOGGER = logging.getLogger("OSM Charter")
 
-
 FTEP_S3_ENDPOINT = "s3.waw2-1.cloudferro.com"
+
+
 def ftep_s3_env(*args, **kwargs):
     return s3.s3_env(endpoint=FTEP_S3_ENDPOINT)(*args, **kwargs)
 
+
 @ftep_s3_env
 def compute_rusle():
-
     parameters_file_path = "/home/worker/workDir/FTEP-WPS-INPUT.properties"
     # Default parameter values
     params = ftep.Params(parameters_file_path)
