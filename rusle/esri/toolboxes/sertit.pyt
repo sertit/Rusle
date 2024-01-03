@@ -284,6 +284,7 @@ class Rusle(object):
             sys.path.append(tools_path)
 
         from rusle.rusle_arcgis import main_arcgis
+        main_arcgis(parameters, messages)
         return
 
     def postExecute(self, parameters):
