@@ -1,4 +1,4 @@
-FROM registry.app.unistra.fr/sertit/eo-containers:geo_sertit_latest
+FROM registry.app.unistra.fr/sertit/eo-containers:geo_latest
 
 MAINTAINER Bastien Coriat
 RUN pip install pysheds
