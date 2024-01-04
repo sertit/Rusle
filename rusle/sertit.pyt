@@ -179,13 +179,13 @@ class Rusle(object):
             direction="Input",
         )
 
-        # Third parameter
+        # Output folder
         output_folder = arcpy.Parameter(
             displayName="Output Folder",
             name="output_folder",
             datatype="DEFolder",
             parameterType="Required",
-            direction="Output",
+            direction="Input",
         )
 
         params = [
