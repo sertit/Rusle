@@ -268,14 +268,14 @@ class Rusle(object):
         """The source code of the tool."""
 
         # Don't remove these lines
-        tools_path = pathlib.Path(__file__).parent.parent
+        tools_path = pathlib.Path(__file__).parent
 
         # The tool is run from sertit_atools so add sertit_atools to python path
-        if tools_path.parent.name == "sertit_atools":
-            tools_path = str(tools_path.parent.absolute())
+        if tools_path.name == "sertit_atools":
+            tools_path = str(tools_path.absolute())
         # The tool is run from this project so only add the root folder to python path
         else:
-            tools_path = str(tools_path.absolute())
+            tools_path = str(tools_path.parent.absolute())
         if tools_path not in sys.path:
             sys.path.append(tools_path)
 
