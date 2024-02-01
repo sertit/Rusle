@@ -1,8 +1,5 @@
 import arcpy
 
-import pathlib
-import sys
-
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
@@ -266,6 +263,9 @@ class Rusle(object):
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
+
+        import pathlib
+        import sys
 
         # Don't remove these lines
         tools_path = pathlib.Path(__file__).parent
