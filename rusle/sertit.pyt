@@ -311,29 +311,14 @@ def epsg_from_arcgis_proj(arcgis_proj):
 
 def main_arcgis(parameters, messsages):
 
-    import logging.handlers
+    import logging
     import arcpy
-    from sertit.arcpy import init_conda_arcpy_env, ArcPyLogHandler
+    from sertit.arcpy import init_conda_arcpy_env, ArcPyLogger
 
     init_conda_arcpy_env()
 
     from rusle.rusle_core import rusle_core, InputParameters, DataPath
-    from shapely import speedups
-
-    DEBUG = False
-    LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
-    LOGGER = logging.getLogger("OSM Charter")
-
-    speedups.disable()
-
-
-    logger = logging.getLogger("RUSLE")
-    handler = ArcPyLogHandler(
-        "output_log.log", maxBytes=1024 * 1024 * 2, backupCount=10  # 2MB log files
-    )
-    formatter = logging.Formatter("%(levelname)-8s %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger = ArcPyLogger("RUSLE").logger
     logger.setLevel(logging.DEBUG)
 
     # --- ENV VAR ---
@@ -374,5 +359,3 @@ def main_arcgis(parameters, messsages):
         import traceback
 
         logger.error("RUSLE has failed: %s", traceback.format_exc())
-    finally:
-        logger.removeHandler(handler)
