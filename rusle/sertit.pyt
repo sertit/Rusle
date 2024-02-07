@@ -353,7 +353,7 @@ def main_arcgis(parameters, messsages):
         # Compute RUSLE charter
         rusle_core(input_dict)
 
-        LOGGER.info("--- RUSLE was a success.")
+        logger.info("--- RUSLE was a success.")
 
     except Exception as ex:
         import traceback
