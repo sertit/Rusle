@@ -318,6 +318,8 @@ def main_arcgis(parameters, messsages):
     init_conda_arcpy_env()
 
     from rusle.rusle_core import rusle_core, InputParameters, DataPath
+    # Don't concatenate or edit variable names of the two following lines unless
+    # you don't want logs
     arcpy_logger = ArcPyLogger("RUSLE")
     logger = arcpy_logger.logger
     logger.setLevel(logging.DEBUG)
