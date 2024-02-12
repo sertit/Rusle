@@ -690,8 +690,13 @@ def produce_ls_factor(dem_path: str, tmp_dir: str):
 
     # # -- Export flow directions
     dir_path = os.path.join(tmp_dir, "dir.tif")
+    # Workaround because type int64 works on Windows but not Linux while it is not supposed to work on both...
+    # https://github.com/mdbartos/pysheds/issues/109
+    dtype = None
+    if os.name == "posix":
+        dtype = np.int32
     grid.to_raster(
-        fdir, dir_path, target_view=fdir.viewfinder, blockxsize=16, blockysize=16
+        fdir, dir_path, target_view=fdir.viewfinder, blockxsize=16, blockysize=16, dtype=dtype
     )
 
     # Calculate flow accumulation
