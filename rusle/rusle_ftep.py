@@ -28,7 +28,7 @@ def compute_rusle():
     # Load inputs
     satellite_product_path = "/home/worker/workDir/inDir/satellite_product_path/"
     satellite_product_path = (
-            satellite_product_path + os.listdir(satellite_product_path)[0]
+        satellite_product_path + os.listdir(satellite_product_path)[0]
     )
     aoi_path = "/home/worker/workDir/inDir/aoi_path/"
 
@@ -42,7 +42,13 @@ def compute_rusle():
         aoi_path = aoi_path + os.listdir(sub_aoi_files)[0]
 
     from sertit import logs
-    from rusle.rusle_core import LOGGER, LOGGING_FORMAT, rusle_core, InputParameters, DataPath
+    from rusle.rusle_core import (
+        LOGGER,
+        LOGGING_FORMAT,
+        rusle_core,
+        InputParameters,
+        DataPath,
+    )
 
     logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
     LOGGER.info("--- RUSLE ---")
