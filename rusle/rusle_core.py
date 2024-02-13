@@ -233,16 +233,10 @@ def check_parameters(input_dict: dict) -> None:
     # ---- Extract parameters
     # aoi_path = input_dict.get("aoi_path")
     location = input_dict.get(InputParameters.LOCATION.value)
-    fcover_method = input_dict.get(InputParameters.FCOVER_METHOD.value)
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     p03_path = input_dict.get(InputParameters.P03_PATH.value)
-    # del_path = input_dict.get("del_path")
-    ls_method = input_dict.get(InputParameters.LS_METHOD.value)
     dem_name = input_dict.get(InputParameters.DEM_NAME.value)
     other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
-    # output_resolution = input_dict.get("output_resolution")
-    # ref_system = input_dict.get("ref_system")
-    # output_dir = input_dict.get("output_dir")
 
     # -- Check if landcover_name is valid
     if landcover_name not in LandcoverType.list_values():
@@ -252,12 +246,6 @@ def check_parameters(input_dict: dict) -> None:
     # -- Check if location is valid
     if location not in LocationType.list_values():
         raise ValueError(f"location should be among {LocationType.list_values()}")
-    # -- Check if fcover_method is valid
-    if fcover_method not in MethodType.list_values():
-        raise ValueError(f"fcover_method should be among {MethodType.list_values()}")
-    # -- Check if ls_method is valid
-    if ls_method not in MethodType.list_values():
-        raise ValueError(f"ls_method should be among {MethodType.list_values()}")
     # -- Check if dem_name is valid
     if dem_name not in DemType.list_values():
         raise ValueError(f"ls_method should be among {DemType.list_values()}")
@@ -828,7 +816,6 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     # --- Extract parameters ---
     aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
     location = input_dict.get(InputParameters.LOCATION.value)
-    fcover_method = input_dict.get(InputParameters.FCOVER_METHOD.value)
     fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
     nir_path = input_dict.get(InputParameters.NIR_PATH.value)
     red_path = input_dict.get(InputParameters.RED_PATH.value)
@@ -837,7 +824,6 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     )
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     p03_path = input_dict.get(InputParameters.P03_PATH.value)
-    ls_method = input_dict.get(InputParameters.LS_METHOD.value)
     ls_path = input_dict.get(InputParameters.LS_PATH.value)
     output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
 
@@ -869,11 +855,11 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         }
 
         # -- Add the ls raster to the pre process dict if provided
-        if ls_method == MethodType.ALREADY_PROVIDED.value:
+        if ls_path is not None:
             raster_dict["ls"] = [ls_path, Resampling.bilinear]
 
         # -- Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_method == MethodType.TO_BE_CALCULATED.value:
+        if fcover_path is None:
             if satellite_product_path is not None:
                 prod = Reader().open(satellite_product_path)
                 bands = prod.load([NIR, RED], window=aoi_path)
@@ -884,7 +870,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             else:
                 raster_dict["red"] = [red_path, Resampling.bilinear]
                 raster_dict["nir"] = [nir_path, Resampling.bilinear]
-        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
+        else:
             raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
 
     elif location == LocationType.GLOBAL.value:
@@ -902,11 +888,11 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         }
 
         # -- Add the ls raster to the pre process dict if provided
-        if ls_method == MethodType.ALREADY_PROVIDED.value:
+        if ls_path is not None:
             raster_dict["ls"] = [ls_path, Resampling.bilinear]
 
         # -- Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_method == MethodType.TO_BE_CALCULATED.value:
+        if fcover_path is None:
             if satellite_product_path is not None:
                 prod = Reader().open(satellite_product_path)
                 bands = prod.load([NIR, RED], window=aoi_path)
@@ -917,7 +903,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             else:
                 raster_dict["red"] = [red_path, Resampling.bilinear]
                 raster_dict["nir"] = [nir_path, Resampling.bilinear]
-        elif fcover_method == MethodType.ALREADY_PROVIDED.value:
+        else:
             raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
     else:
         raise ValueError(f"Unknown Location Type: {location}")
@@ -1067,11 +1053,10 @@ def rusle_core(input_dict: dict) -> None:
     # --- Extract parameters ---
     aoi_raw_path = input_dict.get(InputParameters.AOI_PATH.value)
     location = input_dict.get(InputParameters.LOCATION.value)
-    fcover_method = input_dict.get(InputParameters.FCOVER_METHOD.value)
+    fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     del_path = input_dict.get(InputParameters.DEL_PATH.value)
-    ls_method = input_dict.get(InputParameters.LS_METHOD.value)
-    # ls_path = input_dict.get("ls_path")
+    ls_path = input_dict.get(InputParameters.LS_PATH.value)
     dem_name = input_dict.get(InputParameters.DEM_NAME.value)
     other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
     output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
@@ -1087,8 +1072,15 @@ def rusle_core(input_dict: dict) -> None:
     ref_crs = CRS.from_epsg(ref_epsg)
 
     # -- Apply a buffer to the AOI
+    if aoi_raw_path.startswith("POLYGON"):
+        aoi_gpd_wkt = gpd.GeoSeries.from_wkt([aoi_raw_path])
+        aoi_raw_path_wkt = os.path.join(tmp_dir, "aoi_from_wkt.shp")
+
+        aoi_gpd_wkt.to_file(aoi_raw_path_wkt, crs="EPSG:4326")
+        aoi_raw_path = aoi_raw_path_wkt
+
     # - Open aoi
-    aoi_gdf = gpd.read_file(aoi_raw_path)
+    aoi_gdf = vectors.read(aoi_raw_path)
     # - Reproject aoi
     aoi_gdf = aoi_gdf.to_crs(ref_epsg)
     # - Apply buffer
@@ -1116,7 +1108,7 @@ def rusle_core(input_dict: dict) -> None:
     aoi_gdf = gpd.read_file(aoi_path)
 
     # -- Check if ls need to be calculated or not
-    if ls_method == MethodType.TO_BE_CALCULATED.value:
+    if ls_path is None:
         # -- Dict that store dem_name with path
         dem_dict = {
             DemType.EUDEM.value: DataPath.EUDEM_PATH,
@@ -1163,7 +1155,7 @@ def rusle_core(input_dict: dict) -> None:
         ls_xarr = rasters.read(post_process_dict["ls"], window=aoi_gdf)
 
     # -- Check if fcover need to be calculated or not
-    if fcover_method == MethodType.TO_BE_CALCULATED.value:
+    if fcover_path is None:
         # -- Process fcover
         red_process_path = post_process_dict["red"]
         nir_process_path = post_process_dict["nir"]
@@ -1180,10 +1172,8 @@ def rusle_core(input_dict: dict) -> None:
         fcover_path = os.path.join(tmp_dir, "fcover.tif")
         rasters.write(fcover_xarr, fcover_path)  # , nodata=0)
 
-    elif fcover_method == MethodType.ALREADY_PROVIDED.value:
-        fcover_xarr = rasters.read(post_process_dict["fcover"], window=aoi_gdf)
     else:
-        raise ValueError(f"Unknown FCover Method: {fcover_method}")
+        fcover_xarr = rasters.read(post_process_dict["fcover"], window=aoi_gdf)
 
     # -- Mask lulc if del
     if del_path:

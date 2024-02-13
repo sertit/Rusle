@@ -22,8 +22,7 @@ def compute_rusle():
     parser.add_argument(
         "-aoi",
         "--aoi_path",
-        help="AOI path as a shapefile. ",
-        type=to_abspath,
+        help="AOI path or WKT string",
         required=True,
     )
 
@@ -32,15 +31,6 @@ def compute_rusle():
         "--location",
         help="Location",
         choices=["Europe", "Global"],
-        type=str,
-        required=True,
-    ),
-
-    parser.add_argument(
-        "-fc",
-        "--fcover_method",
-        help="Fcover Method",
-        choices=["Already provided", "To be calculated"],
         type=str,
         required=True,
     ),
@@ -98,15 +88,6 @@ def compute_rusle():
     )
 
     parser.add_argument(
-        "-ls",
-        "--ls_method",
-        help="LS Method",
-        choices=["Already provided", "To be calculated"],
-        type=str,
-        required=True,
-    )
-
-    parser.add_argument(
         "-lsp", "--ls_path", help="LS Path if ls Already provided", type=to_abspath
     )
 
@@ -161,7 +142,6 @@ def compute_rusle():
     input_dict = {
         InputParameters.AOI_PATH.value: args.aoi_path,
         InputParameters.LOCATION.value: args.location,
-        InputParameters.FCOVER_METHOD.value: args.fcover_method,
         InputParameters.FCOVER_PATH.value: args.fcover_path,
         InputParameters.NIR_PATH.value: args.nir_path,
         InputParameters.RED_PATH.value: args.red_path,
@@ -169,7 +149,6 @@ def compute_rusle():
         InputParameters.LANDCOVER_NAME.value: args.landcover_name,
         InputParameters.P03_PATH.value: args.p03_path,
         InputParameters.DEL_PATH.value: args.del_path,
-        InputParameters.LS_METHOD.value: args.ls_method,
         InputParameters.LS_PATH.value: args.ls_path,
         InputParameters.DEM_NAME.value: args.dem_name,
         InputParameters.OTHER_DEM_PATH.value: args.other_dem_path,
@@ -178,27 +157,6 @@ def compute_rusle():
         InputParameters.OUTPUT_DIR.value: args.output,
     }
     DataPath.load_paths(args.ftep)
-
-    # input_dict = {
-    #     "aoi_path": str(
-    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\emsn073_aoi_32631.shp"),
-    #     "location": str("Global"),
-    #     "fcover_method": str("To be calculated"),
-    #     "fcover_path": str(""),
-    #     "nir_path": str(
-    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
-    #     "red_path": str(
-    #         r"D:\TLedauphin\02_Temp_traitement\test_rusle\T31TDH_20200805T104031_B08_10m.jp2"),
-    #     "landcover_name": str("Corine Land Cover - 2018 (100m)"),
-    #     "p03_path": str(r""),
-    #     "del_path": str(r""),
-    #     "ls_method": str("To be calculated"),
-    #     "ls_path": str(""),
-    #     "dem_name": str(r"SRTM 30m"),
-    #     "other_dem_path": str(""),
-    #     "output_resolution": int(10),
-    #     "ref_epsg": 32633,
-    #     "output_dir": str(r"D:\TLedauphin\02_Temp_traitement\test_rusle\EMSN158")}
 
     # --- Import osm charter
     print(DataPath.GLOBAL_DIR, DataPath.WORLD_COUNTRIES_PATH)
