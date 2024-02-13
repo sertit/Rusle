@@ -139,35 +139,6 @@ class DataPath:
     AOI_BUFFER = 5000
 
 
-class ArcPyLogHandler(logging.handlers.RotatingFileHandler):
-    """
-    Custom logging class that bounces messages to the arcpy tool window as well
-    as reflecting back to the file.
-    """
-
-    def emit(self, record):
-        """
-        Write the log message
-        """
-
-        try:
-            msg = record.msg % record.args
-        except:
-            try:
-                msg = record.msg.format(record.args)
-            except:
-                msg = record.msg
-
-        if record.levelno >= logging.ERROR:
-            arcpy.AddError(msg)
-        elif record.levelno >= logging.WARNING:
-            arcpy.AddWarning(msg)
-        elif record.levelno >= logging.INFO:
-            arcpy.AddMessage(msg)
-
-        super(ArcPyLogHandler, self).emit(record)
-
-
 @unique
 class InputParameters(ListEnum):
     """
@@ -696,7 +667,12 @@ def produce_ls_factor(dem_path: str, tmp_dir: str):
     if os.name == "posix":
         dtype = np.int32
     grid.to_raster(
-        fdir, dir_path, target_view=fdir.viewfinder, blockxsize=16, blockysize=16, dtype=dtype
+        fdir,
+        dir_path,
+        target_view=fdir.viewfinder,
+        blockxsize=16,
+        blockysize=16,
+        dtype=dtype,
     )
 
     # Calculate flow accumulation

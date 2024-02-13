@@ -146,7 +146,13 @@ def compute_rusle():
     # Parse args
     args = parser.parse_args()
 
-    from rusle.rusle_core import InputParameters, DataPath, rusle_core, LOGGER, LOGGING_FORMAT
+    from rusle.rusle_core import (
+        InputParameters,
+        DataPath,
+        rusle_core,
+        LOGGER,
+        LOGGING_FORMAT,
+    )
 
     logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
     LOGGER.info("--- RUSLE ---")
