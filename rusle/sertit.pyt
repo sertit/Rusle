@@ -278,23 +278,24 @@ def main_arcgis(parameters, messsages):
     input_dict = {
         InputParameters.AOI_PATH.value: parameters[0].valueAsText,
         InputParameters.LOCATION.value: parameters[1].valueAsText,
-        InputParameters.FCOVER_METHOD.value: parameters[2].valueAsText,
-        InputParameters.FCOVER_PATH.value: parameters[3].valueAsText,
-        InputParameters.NIR_PATH.value: parameters[4].valueAsText,
-        InputParameters.RED_PATH.value: parameters[5].valueAsText,
-        InputParameters.LANDCOVER_NAME.value: parameters[6].valueAsText,
-        InputParameters.P03_PATH.value: parameters[7].valueAsText,
-        InputParameters.DEL_PATH.value: parameters[8].valueAsText,
-        InputParameters.LS_METHOD.value: parameters[9].valueAsText,
-        InputParameters.LS_PATH.value: parameters[10].valueAsText,
-        InputParameters.DEM_NAME.value: parameters[11].valueAsText,
-        InputParameters.OTHER_DEM_PATH.value: parameters[12].valueAsText,
-        InputParameters.OUTPUT_RESOLUTION.value: int(parameters[13].valueAsText),
-        InputParameters.REF_EPSG.value: epsg_from_arcgis_proj(
-            parameters[14].valueAsText
-        ),
-        InputParameters.OUTPUT_DIR.value: parameters[15].valueAsText,
+        InputParameters.FCOVER_PATH.value: parameters[2].valueAsText,
+        InputParameters.NIR_PATH.value: parameters[3].valueAsText,
+        InputParameters.RED_PATH.value: parameters[4].valueAsText,
+        InputParameters.LANDCOVER_NAME.value: parameters[5].valueAsText,
+        InputParameters.P03_PATH.value: parameters[6].valueAsText,
+        InputParameters.DEL_PATH.value: parameters[7].valueAsText,
+        InputParameters.LS_PATH.value: parameters[8].valueAsText,
+        InputParameters.DEM_NAME.value: parameters[9].valueAsText,
+        InputParameters.OTHER_DEM_PATH.value: parameters[10].valueAsText,
+        InputParameters.OUTPUT_RESOLUTION.value: int(parameters[11].valueAsText),
+        InputParameters.OUTPUT_DIR.value: parameters[12].valueAsText,
     }
+
+    # Little trick because rusle_core interprets empty string as real value
+    for key in input_dict.keys():
+        if input_dict[key] == "":
+            input_dict[key] = None
+
     DataPath.load_paths()
 
     try:
