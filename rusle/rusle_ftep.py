@@ -49,7 +49,7 @@ def compute_rusle():
         InputParameters.NIR_PATH.value: None,
         InputParameters.RED_PATH.value: None,
         InputParameters.SATELLITE_PRODUCT_PATH.value: satellite_product_path,
-        InputParameters.LANDCOVER_NAME.value: params.getString("landcover_name"),
+        InputParameters.LANDCOVER_NAME.value: params.getString("lulc"),
         InputParameters.P03_PATH.value: None,
         InputParameters.DEL_PATH.value: None,
         InputParameters.DEM_NAME.value: params.getString("dem_name"),
