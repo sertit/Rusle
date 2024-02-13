@@ -54,8 +54,7 @@ def compute_rusle():
         InputParameters.DEL_PATH.value: None,
         InputParameters.DEM_NAME.value: params.getString("dem_name"),
         InputParameters.OTHER_DEM_PATH.value: None,
-        InputParameters.OUTPUT_RESOLUTION.value: params.getInt("output_resolution"),
-        InputParameters.REF_EPSG.value: params.getString("epsg_code"),
+        InputParameters.OUTPUT_RESOLUTION.value: 10,
         InputParameters.OUTPUT_DIR.value: "/home/worker/workDir/outDir/output",
     }
     DataPath.load_paths(ftep=True)
