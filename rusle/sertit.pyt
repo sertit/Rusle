@@ -43,18 +43,6 @@ class Rusle(object):
         location.filter.type = "ValueList"
         location.filter.list = ["Europe", "Global"]
 
-        # FC method
-        fc_method = arcpy.Parameter(
-            displayName="FCover method",
-            name="fc_method",
-            datatype="GPString",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        fc_method.filter.type = "ValueList"
-        fc_method.filter.list = ["Already Provided", "To be calculated"]
-
         # Nir path
         nir_path = arcpy.Parameter(
             displayName="Nir infrared band",
@@ -116,18 +104,6 @@ class Rusle(object):
             direction="Input",
         )
 
-        # LS method
-        ls_method = arcpy.Parameter(
-            displayName="LS method",
-            name="ls_method",
-            datatype="GPString",
-            parameterType="Required",
-            direction="Input",
-        )
-
-        ls_method.filter.type = "ValueList"
-        ls_method.filter.list = ["Already Provided", "To be calculated"]
-
         # LS Raster
         ls_raster_path = arcpy.Parameter(
             displayName="LS Raster",
@@ -188,14 +164,12 @@ class Rusle(object):
         params = [
             aoi,
             location,
-            fc_method,
             fc_path,
             nir_path,
             red_path,
             landcover,
             p03_path,
             fire_delineation,
-            ls_method,
             ls_raster_path,
             dem,
             dem_raster_path,
@@ -215,44 +189,10 @@ class Rusle(object):
         validation is performed.  This method is called whenever a parameter
         has been changed."""
 
-        if parameters[2].value == "To be calculated":
-            parameters[3].enabled = False
-            parameters[4].enabled = True
-            parameters[5].enabled = True
-
-        elif parameters[2].value == "Already provided":
-            parameters[3].enabled = True
-            parameters[4].enabled = False
-            parameters[5].enabled = False
+        if parameters[5].value == "P03":
+            parameters[6].enabled = True
         else:
-            parameters[3].enabled = False
-            parameters[4].enabled = False
-            parameters[5].enabled = False
-
-        if parameters[6].value == "P03":
-            parameters[7].enabled = True
-        else:
-            parameters[7].enabled = False
-
-        # ls_method
-        if parameters[9].value == "To be calculated":
-            parameters[10].enabled = False
-            parameters[11].enabled = True
-
-            # dem
-            if parameters[11].value == "Other":
-                parameters[12].enabled = True
-            else:
-                parameters[12].enabled = False
-
-        # ls_method
-        elif parameters[9].value == "Already provided":
-            parameters[10].enabled = True
-            parameters[11].enabled = False
-        else:
-            parameters[10].enabled = False
-            parameters[11].enabled = False
-            parameters[11].enabled = False
+            parameters[6].enabled = False
 
         return
 
