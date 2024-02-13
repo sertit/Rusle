@@ -38,7 +38,7 @@ def compute_rusle():
     parser.add_argument(
         "-fcp",
         "--fcover_path",
-        help="Framework path if Already provided ",
+        help="Framework path",
         type=to_abspath,
     )
 
@@ -72,7 +72,7 @@ def compute_rusle():
             "Global Land Cover - Copernicus 2020 (100m)",
             "P03",
         ],
-        required=True,
+        default="Global Land Cover - Copernicus 2020 (100m)",
         type=str,
     )
 
@@ -88,7 +88,7 @@ def compute_rusle():
     )
 
     parser.add_argument(
-        "-lsp", "--ls_path", help="LS Path if ls Already provided", type=to_abspath
+        "-lsp", "--ls_path", help="LS Path", type=to_abspath
     )
 
     parser.add_argument(
@@ -97,21 +97,22 @@ def compute_rusle():
         help="DEM Name if ls To be calculated",
         choices=["EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"],
         type=str,
+        default="SRTM 30m",
     )
 
     parser.add_argument(
         "-demp",
         "--other_dem_path",
-        help="DEM path if ls To be calculated and dem = Other",
+        help="DEM path if dem = Other",
         type=to_abspath,
     )
 
     parser.add_argument(
-        "-res", "--output_resolution", help="Output resolution", type=int, required=True
+        "-res", "--output_resolution", help="Output resolution", type=int, default=10
     )
 
     parser.add_argument(
-        "-epsg", "--epsg_code", help="EPSG code", type=int, required=True
+        "-epsg", "--epsg_code", help="EPSG code, 4326 is not accepted", type=int
     )
 
     parser.add_argument(

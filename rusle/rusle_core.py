@@ -1068,9 +1068,6 @@ def rusle_core(input_dict: dict) -> None:
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-    # -- Extract the epsg code from the reference system parameter and made the CRS
-    ref_crs = CRS.from_epsg(ref_epsg)
-
     # -- Apply a buffer to the AOI
     if aoi_raw_path.startswith("POLYGON"):
         aoi_gpd_wkt = gpd.GeoSeries.from_wkt([aoi_raw_path])
@@ -1081,6 +1078,12 @@ def rusle_core(input_dict: dict) -> None:
 
     # - Open aoi
     aoi_gdf = vectors.read(aoi_raw_path)
+
+    # -- Extract the epsg code from the reference system parameter
+    if ref_epsg is None:
+        ref_epsg = aoi_gdf.estimate_utm_crs().to_epsg()
+    ref_crs = CRS.from_epsg(ref_epsg)
+
     # - Reproject aoi
     aoi_gdf = aoi_gdf.to_crs(ref_epsg)
     # - Apply buffer

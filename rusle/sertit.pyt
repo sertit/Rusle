@@ -42,6 +42,7 @@ class Rusle(object):
 
         location.filter.type = "ValueList"
         location.filter.list = ["Europe", "Global"]
+        location.value = "Global"
 
         # Nir path
         nir_path = arcpy.Parameter(
@@ -68,6 +69,7 @@ class Rusle(object):
             datatype="DEFile",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         # Landcover
@@ -77,6 +79,7 @@ class Rusle(object):
             datatype="GPString",
             parameterType="Required",
             direction="Input",
+            category="Advanced",
         )
 
         landcover.filter.type = "ValueList"
@@ -85,6 +88,7 @@ class Rusle(object):
             "Global Land Cover - Copernicus 2020 (100m)",
             "P03",
         ]
+        landcover.value = "Global Land Cover - Copernicus 2020 (100m)"
 
         # P03 Raster
         p03_path = arcpy.Parameter(
@@ -93,6 +97,7 @@ class Rusle(object):
             datatype="DEFile",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         # Fire delineation
@@ -102,6 +107,7 @@ class Rusle(object):
             datatype="DEFile",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         # LS Raster
@@ -111,6 +117,7 @@ class Rusle(object):
             datatype="DEFile",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         # DEM
@@ -120,10 +127,12 @@ class Rusle(object):
             datatype="GPString",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         dem.filter.type = "ValueList"
         dem.filter.list = ["EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]
+        dem.value = "SRTM 30m"
 
         # Dem Raster path
         dem_raster_path = arcpy.Parameter(
@@ -132,6 +141,7 @@ class Rusle(object):
             datatype="DEFile",
             parameterType="Optional",
             direction="Input",
+            category="Advanced",
         )
 
         # Output resolution
@@ -139,18 +149,10 @@ class Rusle(object):
             displayName="Output resolution",
             name="output_resolution",
             datatype="GPDouble",
-            parameterType="Required",
             direction="Input",
+            category="Advanced",
         )
-
-        # Output Coordinate System
-        output_coordinate_system = arcpy.Parameter(
-            displayName="Output Coordinate System",
-            name="output_coordinate_system",
-            datatype="GPCoordinateSystem",
-            parameterType="Required",
-            direction="Input",
-        )
+        output_resolution.value = 10
 
         # Output folder
         output_folder = arcpy.Parameter(
@@ -174,7 +176,6 @@ class Rusle(object):
             dem,
             dem_raster_path,
             output_resolution,
-            output_coordinate_system,
             output_folder,
         ]
 
@@ -188,6 +189,10 @@ class Rusle(object):
         """Modify the values and properties of parameters before internal
         validation is performed.  This method is called whenever a parameter
         has been changed."""
+        if parameters[9].value == "Other":
+            parameters[10].enabled = True
+        else:
+            parameters[10].enabled = False
 
         if parameters[5].value == "P03":
             parameters[6].enabled = True
