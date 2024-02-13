@@ -30,16 +30,6 @@ def compute_rusle():
     satellite_product_path = (
         satellite_product_path + os.listdir(satellite_product_path)[0]
     )
-    aoi_path = "/home/worker/workDir/inDir/aoi_path/"
-
-    # Only one AOI is expected. It means that the only case where more than 2 files can be encountered is with shp
-    sub_aoi_files = os.listdir(aoi_path)[0]
-    if len(sub_aoi_files) > 1:
-        for path in sub_aoi_files:
-            if path.endswith("shp"):
-                aoi_path = aoi_path + path
-    else:
-        aoi_path = aoi_path + os.listdir(sub_aoi_files)[0]
 
     from sertit import logs
     from rusle.rusle_core import (
@@ -54,7 +44,7 @@ def compute_rusle():
     LOGGER.info("--- RUSLE ---")
 
     input_dict = {
-        InputParameters.AOI_PATH.value: aoi_path,
+        InputParameters.AOI_PATH.value: params.getString("aoi"),
         InputParameters.LOCATION.value: params.getString("location"),
         InputParameters.NIR_PATH.value: None,
         InputParameters.RED_PATH.value: None,
