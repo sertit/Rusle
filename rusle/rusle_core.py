@@ -147,7 +147,6 @@ class InputParameters(ListEnum):
 
     AOI_PATH = "aoi_path"
     LOCATION = "location"
-    FCOVER_METHOD = "fcover_method"
     FCOVER_PATH = "fcover_path"
     NIR_PATH = "nir_path"
     RED_PATH = "red_path"
@@ -155,13 +154,13 @@ class InputParameters(ListEnum):
     LANDCOVER_NAME = "landcover_name"
     P03_PATH = "p03_path"
     DEL_PATH = "del_path"
-    LS_METHOD = "ls_method"
     LS_PATH = "ls_path"
     DEM_NAME = "dem_name"
     OTHER_DEM_PATH = "other_dem_path"
     OUTPUT_RESOLUTION = "output_resolution"
     REF_EPSG = "ref_epsg"
     OUTPUT_DIR = "output_dir"
+    TMP_DIR = "temp_dir"
 
 
 @unique
@@ -172,8 +171,6 @@ class LandcoverType(ListEnum):
 
     CLC = "Corine Land Cover - 2018 (100m)"
     GLC = "Global Land Cover - Copernicus 2020 (100m)"
-    # GC = "GlobCover - ESA 2005 (300m)"
-    # GL = "GlobeLand30 - China 2020 (30m)"
     P03 = "P03"
 
 
@@ -185,16 +182,6 @@ class LocationType(ListEnum):
 
     EUROPE = "Europe"
     GLOBAL = "Global"
-
-
-@unique
-class MethodType(ListEnum):
-    """
-    List of the provided method
-    """
-
-    TO_BE_CALCULATED = "To be calculated"
-    ALREADY_PROVIDED = "Already provided"
 
 
 @unique
@@ -836,14 +823,13 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     landcover_path_dict = {
         LandcoverType.CLC.value: DataPath.CLC_PATH,
         LandcoverType.GLC.value: DataPath.GLC_PATH,
-        # LandcoverType.GC.value: GC_PATH,
-        # LandcoverType.GL.value: GL_PATH,
         LandcoverType.P03.value: p03_path,
     }
 
     # -- Store landcover path in a variable
     lulc_path = landcover_path_dict[landcover_name]
 
+    raster_dict = {}
     # -- Check location
     if location == LocationType.EUROPE.value:
         # -- Dict that store raster to pre_process and the type of resampling
@@ -854,26 +840,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             "p": [DataPath.P_EURO_PATH, Resampling.bilinear],
         }
 
-        # -- Add the ls raster to the pre process dict if provided
-        if ls_path is not None:
-            raster_dict["ls"] = [ls_path, Resampling.bilinear]
-
-        # -- Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_path is None:
-            if satellite_product_path is not None:
-                prod = Reader().open(satellite_product_path)
-                bands = prod.load([NIR, RED], window=aoi_path)
-                red = bands[RED]
-                nir = bands[NIR]
-                raster_dict["red"] = [red, Resampling.bilinear]
-                raster_dict["nir"] = [nir, Resampling.bilinear]
-            else:
-                raster_dict["red"] = [red_path, Resampling.bilinear]
-                raster_dict["nir"] = [nir_path, Resampling.bilinear]
-        else:
-            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
-
-    elif location == LocationType.GLOBAL.value:
+    if location == LocationType.GLOBAL.value:
         # -- Produce k
         k_xarr = produce_k_outside_europe(aoi_path)
         # -- Write k raster
@@ -887,26 +854,24 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             "k": [k_path, Resampling.nearest],
         }
 
-        # -- Add the ls raster to the pre process dict if provided
-        if ls_path is not None:
-            raster_dict["ls"] = [ls_path, Resampling.bilinear]
+    # -- Add the ls raster to the pre process dict if provided
+    if ls_path is not None:
+        raster_dict["ls"] = [ls_path, Resampling.bilinear]
 
-        # -- Add bands to the pre process dict if fcover need to be calculated or not
-        if fcover_path is None:
-            if satellite_product_path is not None:
-                prod = Reader().open(satellite_product_path)
-                bands = prod.load([NIR, RED], window=aoi_path)
-                red = bands[RED]
-                nir = bands[NIR]
-                raster_dict["red"] = [red, Resampling.bilinear]
-                raster_dict["nir"] = [nir, Resampling.bilinear]
-            else:
-                raster_dict["red"] = [red_path, Resampling.bilinear]
-                raster_dict["nir"] = [nir_path, Resampling.bilinear]
+    # -- Add bands to the pre process dict if fcover need to be calculated or not
+    if fcover_path is None:
+        if satellite_product_path is not None:
+            prod = Reader().open(satellite_product_path)
+            bands = prod.load([NIR, RED], window=aoi_path)
+            red = bands[RED]
+            nir = bands[NIR]
+            raster_dict["red"] = [red, Resampling.bilinear]
+            raster_dict["nir"] = [nir, Resampling.bilinear]
         else:
-            raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
+            raster_dict["red"] = [red_path, Resampling.bilinear]
+            raster_dict["nir"] = [nir_path, Resampling.bilinear]
     else:
-        raise ValueError(f"Unknown Location Type: {location}")
+        raster_dict["fcover"] = [fcover_path, Resampling.bilinear]
 
     return raster_dict
 
@@ -1062,9 +1027,11 @@ def rusle_core(input_dict: dict) -> None:
     output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
     ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
     output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
 
     # --- Create temp_dir if not exist ---
-    tmp_dir = os.path.join(output_dir, "temp_dir")
+    if not AnyPath(tmp_dir).is_absolute():
+        tmp_dir = os.path.join(output_dir, "temp_dir")
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 

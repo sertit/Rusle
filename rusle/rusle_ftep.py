@@ -56,6 +56,7 @@ def compute_rusle():
         InputParameters.OTHER_DEM_PATH.value: None,
         InputParameters.OUTPUT_RESOLUTION.value: 10,
         InputParameters.OUTPUT_DIR.value: "/home/worker/workDir/outDir/output",
+        InputParameters.TMP_DIR.value: "/home/worker/workDir/outDir/tmp_dir",
     }
     DataPath.load_paths(ftep=True)
 
