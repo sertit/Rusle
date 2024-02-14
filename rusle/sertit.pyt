@@ -85,10 +85,10 @@ class Rusle(object):
         landcover.filter.type = "ValueList"
         landcover.filter.list = [
             "Corine Land Cover - 2018 (100m)",
-            "Global Land Cover - Copernicus 2020 (100m)",
+            "Global Land Cover - Copernicus 2019 (100m)",
             "P03",
         ]
-        landcover.value = "Global Land Cover - Copernicus 2020 (100m)"
+        landcover.value = "Global Land Cover - Copernicus 2019 (100m)"
 
         # P03 Raster
         p03_path = arcpy.Parameter(

@@ -202,7 +202,7 @@ class LandcoverStructure(ListEnum):
     """
 
     CLC = "Corine Land Cover - 2018 (100m)"
-    GLC = "Global Land Cover - Copernicus 2020 (100m)"
+    GLC = "Global Land Cover - Copernicus 2019 (100m)"
     GC = "GlobCover - ESA 2005 (300m)"
     GL = "GlobeLand30 - China 2020 (30m)"
     P03 = "P03"
@@ -500,7 +500,7 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             np.nan,
         )
 
-    # -- Global Land Cover - Copernicus 2020 (100m)
+    # -- Global Land Cover - Copernicus 2019 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
             334: [0.1, 0.55],
