@@ -26,7 +26,7 @@ class Rusle(object):
         aoi = arcpy.Parameter(
             displayName="Aoi",
             name="aoi",
-            datatype="DEFile",
+            datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input",
         )
@@ -48,7 +48,7 @@ class Rusle(object):
         nir_path = arcpy.Parameter(
             displayName="Nir infrared band",
             name="nir_path",
-            datatype="DEFile",
+            datatype="GPRasterLayer",
             parameterType="Optional",
             direction="Input",
         )
@@ -57,7 +57,7 @@ class Rusle(object):
         red_path = arcpy.Parameter(
             displayName="Red band",
             name="red_path",
-            datatype="DEFile",
+            datatype="GPRasterLayer",
             parameterType="Optional",
             direction="Input",
         )
@@ -273,14 +273,32 @@ def main_arcgis(parameters, messsages):
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")
 
+    aoi_path = parameters[0].valueAsText
+    try:
+        aoi_path = parameters[0].value.dataSource
+    except:
+        pass
+
+    nir_path = parameters[3].valueAsText
+    try:
+        nir_path = parameters[3].value.dataSource
+    except:
+        pass
+
+    red_path = parameters[4].valueAsText
+    try:
+        red_path = parameters[4].value.dataSource
+    except:
+        pass
+
     # --- Parameters ---
     # Load inputs
     input_dict = {
-        InputParameters.AOI_PATH.value: parameters[0].valueAsText,
+        InputParameters.AOI_PATH.value: aoi_path,
         InputParameters.LOCATION.value: parameters[1].valueAsText,
         InputParameters.FCOVER_PATH.value: parameters[2].valueAsText,
-        InputParameters.NIR_PATH.value: parameters[3].valueAsText,
-        InputParameters.RED_PATH.value: parameters[4].valueAsText,
+        InputParameters.NIR_PATH.value: nir_path,
+        InputParameters.RED_PATH.value: red_path,
         InputParameters.LANDCOVER_NAME.value: parameters[5].valueAsText,
         InputParameters.P03_PATH.value: parameters[6].valueAsText,
         InputParameters.DEL_PATH.value: parameters[7].valueAsText,
