@@ -132,7 +132,7 @@ class Rusle(object):
 
         dem.filter.type = "ValueList"
         dem.filter.list = ["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]
-        dem.value = "SRTM 30m"
+        dem.value = "COPDEM 30m"
 
         # Dem Raster path
         dem_raster_path = arcpy.Parameter(
@@ -258,7 +258,7 @@ def main_arcgis(parameters, messsages):
 
     import logging
     import arcpy
-    from sertit.arcpy import init_conda_arcpy_env, ArcPyLogger
+    from sertit.arcpy import init_conda_arcpy_env, ArcPyLogger, feature_layer_to_path
 
     init_conda_arcpy_env()
 
@@ -273,23 +273,9 @@ def main_arcgis(parameters, messsages):
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")
 
-    aoi_path = parameters[0].valueAsText
-    try:
-        aoi_path = parameters[0].value.dataSource
-    except:
-        pass
-
-    nir_path = parameters[3].valueAsText
-    try:
-        nir_path = parameters[3].value.dataSource
-    except:
-        pass
-
-    red_path = parameters[4].valueAsText
-    try:
-        red_path = parameters[4].value.dataSource
-    except:
-        pass
+    aoi_path = feature_layer_to_path(parameters[0].value)
+    nir_path = feature_layer_to_path(parameters[3].value)
+    red_path = feature_layer_to_path(parameters[4].value)
 
     # --- Parameters ---
     # Load inputs
