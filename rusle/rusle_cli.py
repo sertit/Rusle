@@ -69,10 +69,10 @@ def compute_rusle():
         help="Land Cover Name",
         choices=[
             "Corine Land Cover - 2018 (100m)",
-            "Global Land Cover - Copernicus 2020 (100m)",
+            "Global Land Cover - Copernicus 2019 (100m)",
             "P03",
         ],
-        default="Global Land Cover - Copernicus 2020 (100m)",
+        default="Global Land Cover - Copernicus 2019 (100m)",
         type=str,
     )
 
@@ -95,9 +95,9 @@ def compute_rusle():
         "-dem",
         "--dem_name",
         help="DEM Name if ls To be calculated",
-        choices=["EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"],
+        choices=["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"],
         type=str,
-        default="SRTM 30m",
+        default="COPDEM 30m",
     )
 
     parser.add_argument(

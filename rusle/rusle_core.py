@@ -134,6 +134,7 @@ class DataPath:
             / "MERIT_Hydrologically_Adjusted_Elevations"
             / "MERIT_DEM.vrt"
         )
+        cls.COPDEM30_PATH = cls.GLOBAL_DIR / "COPDEM_30m" / "COPDEM_30m.vrt"
 
     # Buffer apply to the AOI
     AOI_BUFFER = 5000
@@ -170,7 +171,7 @@ class LandcoverType(ListEnum):
     """
 
     CLC = "Corine Land Cover - 2018 (100m)"
-    GLC = "Global Land Cover - Copernicus 2020 (100m)"
+    GLC = "Global Land Cover - Copernicus 2019 (100m)"
     P03 = "P03"
 
 
@@ -193,6 +194,7 @@ class DemType(ListEnum):
     EUDEM = "EUDEM 25m"
     SRTM = "SRTM 30m"
     MERIT = "MERIT 5 deg"
+    COPDEM_30 = "COPDEM 30m"
     OTHER = "Other"
 
 
@@ -1030,7 +1032,7 @@ def rusle_core(input_dict: dict) -> None:
     tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
 
     # --- Create temp_dir if not exist ---
-    if not AnyPath(tmp_dir).is_absolute():
+    if tmp_dir is None or not AnyPath(tmp_dir).is_absolute():
         tmp_dir = os.path.join(output_dir, "temp_dir")
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
@@ -1084,6 +1086,7 @@ def rusle_core(input_dict: dict) -> None:
             DemType.EUDEM.value: DataPath.EUDEM_PATH,
             DemType.SRTM.value: DataPath.SRTM30_PATH,
             DemType.MERIT.value: DataPath.MERIT_PATH,
+            DemType.COPDEM_30.value: DataPath.COPDEM30_PATH,
             DemType.OTHER.value: other_dem_path,
         }
 

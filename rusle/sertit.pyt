@@ -131,7 +131,7 @@ class Rusle(object):
         )
 
         dem.filter.type = "ValueList"
-        dem.filter.list = ["EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]
+        dem.filter.list = ["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]
         dem.value = "SRTM 30m"
 
         # Dem Raster path
