@@ -1037,7 +1037,7 @@ def rusle_core(input_dict: dict) -> None:
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-    # -- Apply a buffer to the AOI
+    # Write wkt string input to shapefile
     if aoi_raw_path.startswith("POLYGON"):
         aoi_gpd_wkt = gpd.GeoSeries.from_wkt([aoi_raw_path])
         aoi_raw_path_wkt = os.path.join(tmp_dir, "aoi_from_wkt.shp")
@@ -1055,6 +1055,11 @@ def rusle_core(input_dict: dict) -> None:
 
     # - Reproject aoi
     aoi_gdf = aoi_gdf.to_crs(ref_epsg)
+
+    # - Write original AOI to file
+    aoi_path = os.path.join(tmp_dir, "aoi.shp")
+    aoi_gdf.to_file(aoi_path)
+
     # - Apply buffer
     aoi_gdf.geometry = aoi_gdf.geometry.buffer(DataPath.AOI_BUFFER)
 
@@ -1200,15 +1205,21 @@ def rusle_core(input_dict: dict) -> None:
     # -- Produce a with RUSLE model
     a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
 
+    # Reload AOI to clip the output raster to the AOI
+    aoi_path = os.path.join(tmp_dir, "aoi.shp")
+    aoi = vectors.read(aoi_path)
+
     # -- Write the a raster
     a_path = os.path.join(output_dir, "a_rusle.tif")
-    rasters.write(a_xarr, a_path)  # , nodata=0)
+    a_xarr_clipped = a_xarr.rio.clip(aoi.geometry.values, aoi.crs)
+    rasters.write(a_xarr_clipped, a_path)
 
     # -- Reclass a
     a_reclas_xarr = produce_a_reclass_arr(a_xarr)
 
     # -- Write the a raster
     a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
-    rasters.write(a_reclas_xarr, a_reclass_path)  # , nodata=0)
+    a_reclas_xarr_clipped = a_reclas_xarr.rio.clip(aoi.geometry.values, aoi.crs)
+    rasters.write(a_reclas_xarr_clipped, a_reclass_path)
 
     return
