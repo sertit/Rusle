@@ -18,48 +18,41 @@ def compute_rusle():
 
     """
     # --- PARSER ---
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "-aoi",
         "--aoi_path",
-        help="AOI path or WKT string",
+        help="Path to the AOI (shp, geojson) or WKT string",
         required=True,
     )
 
     parser.add_argument(
         "-loc",
         "--location",
-        help="Location",
+        help="Location of the AOI",
         choices=["Europe", "Global"],
         type=str,
         required=True,
     ),
 
     parser.add_argument(
-        "-fcp",
-        "--fcover_path",
-        help="Framework path",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
         "-nir",
         "--nir_path",
-        help="NIR band path if Fcover is To be calculated",
+        help="NIR band path needed if no fcover raster is provided.",
         type=to_abspath,
     )
 
     parser.add_argument(
         "-red",
         "--red_path",
-        help="RED band path if Fcover is To be calculated",
+        help="RED band path needed if no fcover raster is provided.",
         type=to_abspath,
     )
 
     parser.add_argument(
-        "--satellite_product_path",
-        "--sat_product_path",
-        help="Path to a satellite product with at least the Nir and Red bands",
+        "--satellite_product",
+        "--sat_product",
+        help="Alternative to red and nir options. Path to a satellite product with at least the Nir and Red bands",
         type=to_abspath,
     )
 
@@ -77,6 +70,14 @@ def compute_rusle():
     )
 
     parser.add_argument(
+        "-fcp",
+        "--fcover_path",
+        help="Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. "
+        "If not provided, it will be calculated from nir and red bands or satellite products",
+        type=to_abspath,
+    )
+
+    parser.add_argument(
         "-p03",
         "--p03_path",
         help="P03 Path if lulc =  P03. Should have the same nomenclature as CLC",
@@ -88,13 +89,17 @@ def compute_rusle():
     )
 
     parser.add_argument(
-        "-lsp", "--ls_path", help="LS Path", type=to_abspath
+        "-lsp",
+        "--ls_path",
+        help="Optional path to the Slope angle and length (LS factor) raster. "
+             "If not provided, it is calculated thanks to the DEM.",
+        type=to_abspath,
     )
 
     parser.add_argument(
         "-dem",
         "--dem_name",
-        help="DEM Name if ls To be calculated",
+        help="DEM Name needed if ls_path option is not provided.",
         choices=["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"],
         type=str,
         default="COPDEM 30m",
@@ -112,7 +117,11 @@ def compute_rusle():
     )
 
     parser.add_argument(
-        "-epsg", "--epsg_code", help="EPSG code, 4326 is not accepted", type=int
+        "-epsg",
+        "--epsg_code",
+        help="EPSG code, 4326 is not accepted. By default, it is the EPSG code of the AOI UTM zone.",
+        type=int,
+        default=argparse.SUPPRESS,
     )
 
     parser.add_argument(
