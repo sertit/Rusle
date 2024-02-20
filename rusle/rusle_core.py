@@ -220,24 +220,10 @@ def check_parameters(input_dict: dict) -> None:
 
     """
     # ---- Extract parameters
-    # aoi_path = input_dict.get("aoi_path")
-    location = input_dict.get(InputParameters.LOCATION.value)
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     p03_path = input_dict.get(InputParameters.P03_PATH.value)
     dem_name = input_dict.get(InputParameters.DEM_NAME.value)
     other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
-
-    # -- Check if landcover_name is valid
-    if landcover_name not in LandcoverType.list_values():
-        raise ValueError(
-            f"landcover_name should be among {LandcoverType.list_values()}"
-        )
-    # -- Check if location is valid
-    if location not in LocationType.list_values():
-        raise ValueError(f"location should be among {LocationType.list_values()}")
-    # -- Check if dem_name is valid
-    if dem_name not in DemType.list_values():
-        raise ValueError(f"ls_method should be among {DemType.list_values()}")
 
     # -- Check if P03 if needed
     if (landcover_name == LandcoverType.P03.value) and (p03_path is None):

@@ -2,141 +2,151 @@
 The rusle CLI will fail if you called this file directly. Call the root file rusle.py.
 """
 
-import logging
-import argparse
 import sys
-from sertit import logs
-from sertit.files import to_abspath
-from sertit.unistra import s3_env
+import click
 
 
-@s3_env
-def compute_rusle():
+@click.command()
+@click.option(
+    "-aoi",
+    "--aoi_path",
+    help="Path to the AOI (shp, geojson) or WKT string",
+    required=True,
+)
+@click.option(
+    "-loc",
+    "--location",
+    help="Location of the AOI",
+    type=click.Choice(["Europe", "Global"]),
+    required=True,
+    show_default=True,
+)
+@click.option(
+    "-nir",
+    "--nir_path",
+    help="NIR band path needed if no fcover raster is provided.",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-red",
+    "--red_path",
+    help="RED band path needed if no fcover raster is provided.",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "--satellite_product",
+    "--sat_product",
+    help="Alternative to red and nir options. Path to a satellite product with at least the Nir and Red bands",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-lulc",
+    "--landcover_name",
+    help="Land Cover Name",
+    type=click.Choice(
+        [
+            "Corine Land Cover - 2018 (100m)",
+            "Global Land Cover - Copernicus 2019 (100m)",
+            "P03",
+        ]
+    ),
+    default="Global Land Cover - Copernicus 2019 (100m)",
+    show_default=True,
+)
+@click.option(
+    "-fcp",
+    "--fcover_path",
+    help="Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. "
+    "If not provided, it will be calculated from nir and red bands or satellite products",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-p03",
+    "--p03_path",
+    help="P03 Path if lulc =  P03. Should have the same nomenclature as CLC",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-p03",
+    "-lsp",
+    "--ls_path",
+    help="Optional path to the Slope angle and length (LS factor) raster. "
+    "If not provided, it is calculated thanks to the DEM.",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-del",
+    "--del_path",
+    help="Fire delineation path",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-dem",
+    "--dem_name",
+    help="DEM Name needed if ls_path option is not provided.",
+    type=click.Choice(["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]),
+    default="COPDEM 30m",
+    show_default=True,
+)
+@click.option(
+    "-demp",
+    "--other_dem_path",
+    help="DEM path if dem = Other",
+    type=click.Path(exists=True, resolve_path=True),
+)
+@click.option(
+    "-res",
+    "--output_resolution",
+    help="Output resolution",
+    type=click.IntRange(min=1, max=1000),
+    default=10,
+)
+@click.option(
+    "-epsg",
+    "--epsg_code",
+    help="EPSG code, 4326 is not accepted. By default, it is the EPSG code of the AOI UTM zone.",
+    type=click.IntRange(min=1024, max=32767),
+    show_default=True,
+)
+@click.option(
+    "-o",
+    "--output",
+    help="Output directory. ",
+    type=click.Path(file_okay=False, resolve_path=True, writable=True),
+    required=True,
+)
+@click.option(
+    "--ftep",
+    help="Set this flag if the command line is run on the ftep platform. ",
+    default=False,
+)
+def compute_rusle(
+    aoi_path,
+    location,
+    nir_path,
+    red_path,
+    satellite_product,
+    landcover_name,
+    fcover_path,
+    p03_path,
+    del_path,
+    ls_path,
+    dem_name,
+    other_dem_path,
+    output_resolution,
+    epsg_code,
+    output,
+    ftep,
+):
     """
     Import osm charter with the CLI.
     Returns:
 
     """
-    # --- PARSER ---
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        "-aoi",
-        "--aoi_path",
-        help="Path to the AOI (shp, geojson) or WKT string",
-        required=True,
-    )
+    import logging
 
-    parser.add_argument(
-        "-loc",
-        "--location",
-        help="Location of the AOI",
-        choices=["Europe", "Global"],
-        type=str,
-        required=True,
-    ),
-
-    parser.add_argument(
-        "-nir",
-        "--nir_path",
-        help="NIR band path needed if no fcover raster is provided.",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-red",
-        "--red_path",
-        help="RED band path needed if no fcover raster is provided.",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "--satellite_product",
-        "--sat_product",
-        help="Alternative to red and nir options. Path to a satellite product with at least the Nir and Red bands",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-lulc",
-        "--landcover_name",
-        help="Land Cover Name",
-        choices=[
-            "Corine Land Cover - 2018 (100m)",
-            "Global Land Cover - Copernicus 2019 (100m)",
-            "P03",
-        ],
-        default="Global Land Cover - Copernicus 2019 (100m)",
-        type=str,
-    )
-
-    parser.add_argument(
-        "-fcp",
-        "--fcover_path",
-        help="Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. "
-        "If not provided, it will be calculated from nir and red bands or satellite products",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-p03",
-        "--p03_path",
-        help="P03 Path if lulc =  P03. Should have the same nomenclature as CLC",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-del", "--del_path", help="Fire delineation path", type=to_abspath
-    )
-
-    parser.add_argument(
-        "-lsp",
-        "--ls_path",
-        help="Optional path to the Slope angle and length (LS factor) raster. "
-             "If not provided, it is calculated thanks to the DEM.",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-dem",
-        "--dem_name",
-        help="DEM Name needed if ls_path option is not provided.",
-        choices=["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"],
-        type=str,
-        default="COPDEM 30m",
-    )
-
-    parser.add_argument(
-        "-demp",
-        "--other_dem_path",
-        help="DEM path if dem = Other",
-        type=to_abspath,
-    )
-
-    parser.add_argument(
-        "-res", "--output_resolution", help="Output resolution", type=int, default=10
-    )
-
-    parser.add_argument(
-        "-epsg",
-        "--epsg_code",
-        help="EPSG code, 4326 is not accepted. By default, it is the EPSG code of the AOI UTM zone.",
-        type=int,
-        default=argparse.SUPPRESS,
-    )
-
-    parser.add_argument(
-        "-o", "--output", help="Output directory. ", type=to_abspath, required=True
-    )
-
-    parser.add_argument(
-        "--ftep",
-        help="Set this flag if the command line is run on the ftep platform. ",
-        action="store_true",
-    )
-
-    # Parse args
-    args = parser.parse_args()
-
+    logging.warning("Importing libraries, it may take a while...")
+    from sertit import logs
     from rusle.rusle_core import (
         InputParameters,
         DataPath,
@@ -144,42 +154,44 @@ def compute_rusle():
         LOGGER,
         LOGGING_FORMAT,
     )
+    from sertit.unistra import unistra_s3
 
-    logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
-    LOGGER.info("--- RUSLE ---")
+    with unistra_s3():
+        logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
+        LOGGER.info("--- RUSLE ---")
 
-    # Insert args in a dict
-    input_dict = {
-        InputParameters.AOI_PATH.value: args.aoi_path,
-        InputParameters.LOCATION.value: args.location,
-        InputParameters.FCOVER_PATH.value: args.fcover_path,
-        InputParameters.NIR_PATH.value: args.nir_path,
-        InputParameters.RED_PATH.value: args.red_path,
-        InputParameters.SATELLITE_PRODUCT_PATH.value: args.satellite_product_path,
-        InputParameters.LANDCOVER_NAME.value: args.landcover_name,
-        InputParameters.P03_PATH.value: args.p03_path,
-        InputParameters.DEL_PATH.value: args.del_path,
-        InputParameters.LS_PATH.value: args.ls_path,
-        InputParameters.DEM_NAME.value: args.dem_name,
-        InputParameters.OTHER_DEM_PATH.value: args.other_dem_path,
-        InputParameters.OUTPUT_RESOLUTION.value: args.output_resolution,
-        InputParameters.REF_EPSG.value: args.epsg_code,
-        InputParameters.OUTPUT_DIR.value: args.output,
-    }
-    DataPath.load_paths(args.ftep)
+        # Insert args in a dict
+        input_dict = {
+            InputParameters.AOI_PATH.value: aoi_path,
+            InputParameters.LOCATION.value: location,
+            InputParameters.FCOVER_PATH.value: fcover_path,
+            InputParameters.NIR_PATH.value: nir_path,
+            InputParameters.RED_PATH.value: red_path,
+            InputParameters.SATELLITE_PRODUCT_PATH.value: satellite_product,
+            InputParameters.LANDCOVER_NAME.value: landcover_name,
+            InputParameters.P03_PATH.value: p03_path,
+            InputParameters.DEL_PATH.value: del_path,
+            InputParameters.LS_PATH.value: ls_path,
+            InputParameters.DEM_NAME.value: dem_name,
+            InputParameters.OTHER_DEM_PATH.value: other_dem_path,
+            InputParameters.OUTPUT_RESOLUTION.value: output_resolution,
+            InputParameters.REF_EPSG.value: epsg_code,
+            InputParameters.OUTPUT_DIR.value: output,
+        }
+        DataPath.load_paths(ftep)
 
-    # --- Import osm charter
-    print(DataPath.GLOBAL_DIR, DataPath.WORLD_COUNTRIES_PATH)
+        # --- Import osm charter
+        print(DataPath.GLOBAL_DIR, DataPath.WORLD_COUNTRIES_PATH)
 
-    try:
-        rusle_core(input_dict)
-        LOGGER.info("RUSLE was a success.")
-        sys.exit(0)
+        try:
+            rusle_core(input_dict)
+            LOGGER.info("RUSLE was a success.")
+            sys.exit(0)
 
-    # pylint: disable=W0703
-    except Exception as ex:
-        LOGGER.error("RUSLE has failed:", exc_info=True)
-        sys.exit(1)
+        # pylint: disable=W0703
+        except Exception as ex:
+            LOGGER.error("RUSLE has failed:", exc_info=True)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

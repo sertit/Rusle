@@ -93,48 +93,53 @@ Default : 10 meters
 
 
 ## CLI
+
 This tool is also usable by command line:
 ```shell
-root@aaf85174d98f:/home/root# rusle --help
-usage: rusle [-h] -aoi AOI_PATH -loc {Europe,Global} [-nir NIR_PATH] [-red RED_PATH] [--satellite_product SATELLITE_PRODUCT]
-             [-lulc {Corine Land Cover - 2018 100m),Global Land Cover - Copernicus 2019 (100m,P03}] [-fcp FCOVER_PATH] [-p03 P03_PATH] [-del DEL_PATH]
-             [-lsp LS_PATH] [-dem {COPDEM 30m,EUDEM 25m,SRTM 30m,MERIT 5 deg,Other}] [-demp OTHER_DEM_PATH] [-res OUTPUT_RESOLUTION] [-epsg EPSG_CODE] -o
-             OUTPUT [--ftep]
+Usage: rusle [OPTIONS]
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -aoi AOI_PATH, --aoi_path AOI_PATH
-                        Path to the AOI (shp, geojson) or WKT string (default: None)
-  -loc {Europe,Global}, --location {Europe,Global}
-                        Location of the AOI (default: None)
-  -nir NIR_PATH, --nir_path NIR_PATH
-                        NIR band path needed if no fcover raster is provided. (default: None)
-  -red RED_PATH, --red_path RED_PATH
-                        RED band path needed if no fcover raster is provided. (default: None)
-  --satellite_product SATELLITE_PRODUCT, --sat_product SATELLITE_PRODUCT
-                        Alternative to red and nir options. Path to a satellite product with at least the Nir and Red bands (default: None)
-  -lulc {Corine Land Cover - 2018 (100m),Global Land Cover - Copernicus 2019 (100m),P03}, --landcover_name {Corine Land Cover - 2018 (100m),Global Land Cover - Copernicus 2019 (100m),P03}
-                        Land Cover Name (default: Global Land Cover - Copernicus 2019 (100m))
-  -fcp FCOVER_PATH, --fcover_path FCOVER_PATH
-                        Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. If not provided, it will be calculated from nir and red bands
-                        or satellite products (default: None)
-  -p03 P03_PATH, --p03_path P03_PATH
-                        P03 Path if lulc = P03. Should have the same nomenclature as CLC (default: None)
-  -del DEL_PATH, --del_path DEL_PATH
-                        Fire delineation path (default: None)
-  -lsp LS_PATH, --ls_path LS_PATH
-                        Optional path to the Slope angle and length (LS factor) raster. If not provided, it is calculated thanks to the DEM. (default: None)
-  -dem {COPDEM 30m,EUDEM 25m,SRTM 30m,MERIT 5 deg,Other}, --dem_name {COPDEM 30m,EUDEM 25m,SRTM 30m,MERIT 5 deg,Other}
-                        DEM Name needed if ls_path option is not provided. (default: COPDEM 30m)
-  -demp OTHER_DEM_PATH, --other_dem_path OTHER_DEM_PATH
-                        DEM path if dem = Other (default: None)
-  -res OUTPUT_RESOLUTION, --output_resolution OUTPUT_RESOLUTION
-                        Output resolution (default: 10)
-  -epsg EPSG_CODE, --epsg_code EPSG_CODE
-                        EPSG code, 4326 is not accepted. By default, it is the EPSG code of the AOI UTM zone.
-  -o OUTPUT, --output OUTPUT
-                        Output directory. (default: None)
-  --ftep                Set this flag if the command line is run on the ftep platform. (default: False)
+  Import osm charter with the CLI. Returns:
+
+Options:
+  -aoi, --aoi_path TEXT           Path to the AOI (shp, geojson) or WKT string
+                                  [required]
+  -loc, --location [Europe|Global]
+                                  Location of the AOI  [required]
+  -nir, --nir_path PATH           NIR band path needed if no fcover raster is
+                                  provided.
+  -red, --red_path PATH           RED band path needed if no fcover raster is
+                                  provided.
+  --satellite_product, --sat_product PATH
+                                  Alternative to red and nir options. Path to
+                                  a satellite product with at least the Nir
+                                  and Red bands
+  -lulc, --landcover_name [Corine Land Cover - 2018 (100m)|Global Land Cover - Copernicus 2019 (100m)|P03]
+                                  Land Cover Name  [default: Global Land Cover
+                                  - Copernicus 2019 (100m)]
+  -fcp, --fcover_path PATH        Path to a Fraction of green Vegetation
+                                  Coverportal (Fcover) raster file. If not
+                                  provided, it will be calculated from nir and
+                                  red bands or satellite products
+  -p03, --p03_path PATH           P03 Path if lulc =  P03. Should have the
+                                  same nomenclature as CLC
+  -p03, -lsp, --ls_path PATH      Optional path to the Slope angle and length
+                                  (LS factor) raster. If not provided, it is
+                                  calculated thanks to the DEM.
+  -del, --del_path PATH           Fire delineation path
+  -dem, --dem_name [COPDEM 30m|EUDEM 25m|SRTM 30m|MERIT 5 deg|Other]
+                                  DEM Name needed if ls_path option is not
+                                  provided.  [default: COPDEM 30m]
+  -demp, --other_dem_path PATH    DEM path if dem = Other
+  -res, --output_resolution INTEGER RANGE
+                                  Output resolution  [1<=x<=1000]
+  -epsg, --epsg_code INTEGER RANGE
+                                  EPSG code, 4326 is not accepted. By default,
+                                  it is the EPSG code of the AOI UTM zone.
+                                  [1024<=x<=32767]
+  -o, --output DIRECTORY          Output directory.   [required]
+  --ftep BOOLEAN                  Set this flag if the command line is run on
+                                  the ftep platform.
+  --help                          Show this message and exit.
 ```
 
 Example:
