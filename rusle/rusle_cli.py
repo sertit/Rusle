@@ -17,7 +17,7 @@ import click
     "-loc",
     "--location",
     help="Location of the AOI",
-    type=click.Choice(["Europe", "Global"]),
+    type=click.Choice(["Europe", "Global", "Europe_legacy", "Global_legacy"]),
     required=True,
     show_default=True,
 )

@@ -88,6 +88,7 @@ class DataPath:
         cls.K_EURO_PATH = (
             cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
         )
+        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_factor_with_Ksat.tif"
         cls.LS_EURO_PATH = (
             cls.GLOBAL_DIR
             / "European_Soil_Database_v2"
@@ -183,6 +184,8 @@ class LocationType(ListEnum):
 
     EUROPE = "Europe"
     GLOBAL = "Global"
+    EUROPE_LEGACY = "Europe_legacy"
+    GLOBAL_LEGACY = "Global_legacy"
 
 
 @unique
@@ -819,7 +822,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
 
     raster_dict = {}
     # -- Check location
-    if location == LocationType.EUROPE.value:
+    if location == LocationType.EUROPE_LEGACY.value:
         # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {
             "r": [DataPath.R_EURO_PATH, Resampling.bilinear],
@@ -828,7 +831,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             "p": [DataPath.P_EURO_PATH, Resampling.bilinear],
         }
 
-    if location == LocationType.GLOBAL.value:
+    if location == LocationType.GLOBAL_LEGACY.value:
         # -- Produce k
         k_xarr = produce_k_outside_europe(aoi_path)
         # -- Write k raster
@@ -840,6 +843,30 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
             "r": [DataPath.R_GLOBAL_PATH, Resampling.bilinear],
             "lulc": [lulc_path, Resampling.nearest],
             "k": [k_path, Resampling.nearest],
+        }
+
+    if location == LocationType.EUROPE.value:
+        # -- Dict that store raster to pre_process and the type of resampling
+        raster_dict = {
+            "r": [DataPath.R_EURO_PATH, Resampling.bilinear],
+            "k": [DataPath.K_GLOBAL_PATH, Resampling.bilinear],
+            "lulc": [lulc_path, Resampling.nearest],
+            "p": [DataPath.P_EURO_PATH, Resampling.bilinear],
+        }
+
+    if location == LocationType.GLOBAL.value:
+
+        # -- Produce k
+        k_xarr = produce_k_outside_europe(aoi_path)
+        # -- Write k raster
+        k_path = os.path.join(tmp_dir, "k_raw.tif")
+        rasters.write(k_xarr, k_path)  # , nodata=0)
+
+        # -- Dict that store raster to pre_process and the type of resampling
+        raster_dict = {
+            "r": [DataPath.R_GLOBAL_PATH, Resampling.bilinear],
+            "lulc": [lulc_path, Resampling.nearest],
+            "k": [DataPath.K_GLOBAL_PATH, Resampling.bilinear],
         }
 
     # -- Add the ls raster to the pre process dict if provided
@@ -1169,7 +1196,7 @@ def rusle_core(input_dict: dict) -> None:
     rasters.write(c_xarr, c_out)  # , nodata=0)
 
     # -- Produce p if location is GLOBAL
-    if location == LocationType.GLOBAL.value:
+    if location == LocationType.GLOBAL.value or location == LocationType.GLOBAL_LEGACY.value:
         # -- Produce p
         p_value = 1  # Can change
         p_xarr = xr.full_like(c_xarr, fill_value=p_value)
@@ -1177,7 +1204,7 @@ def rusle_core(input_dict: dict) -> None:
         # -- Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_xarr, p_path)  # , nodata=0)
-    elif location == LocationType.EUROPE.value:
+    elif location == LocationType.EUROPE.value or location == LocationType.EUROPE_LEGACY.value:
         p_xarr = rasters.read(post_process_dict["p"], window=aoi_gdf)
     else:
         raise ValueError(f"Unknown Location Type {location}")
