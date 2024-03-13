@@ -425,7 +425,6 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
         xdarray of the c index raster
     """
     LOGGER.info("-- Produce C index --")
-    print(lulc_name)
     # --- Identify Cfactor
     # -- Cfactor dict and c_arr_arable
 
