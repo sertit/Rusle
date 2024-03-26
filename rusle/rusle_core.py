@@ -447,11 +447,11 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             322: [0.01, 0.1],
             323: [0.01, 0.1],
             324: [0.003, 0.05],
-            331: [0, 0],
-            332: [0, 0],
+            #331: [0, 0],
+            #332: [0, 0],
             333: [0.1, 0.45],
             334: [0.1, 0.55],
-            335: [0, 0],
+            #335: [0, 0],
         }
         # -- Produce arable c
         arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
@@ -459,31 +459,31 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             np.isin(
                 lulc_xarr,
                 [
-                    111,
-                    112,
-                    121,
-                    122,
-                    123,
-                    124,
-                    131,
-                    132,
-                    133,
-                    141,
-                    142,
+                    #111,
+                    #112,
+                    #121,
+                    #122,
+                    #123,
+                    #124,
+                    #131,
+                    #132,
+                    #133,
+                    #141,
+                    #142,
                     211,
                     212,
                     213,
-                    411,
-                    412,
-                    421,
-                    422,
-                    423,
-                    511,
-                    512,
-                    521,
-                    522,
-                    523,
-                    999,
+                    #411,
+                    #412,
+                    #421,
+                    #422,
+                    #423,
+                    #511,
+                    #512,
+                    #521,
+                    #522,
+                    #523,
+                    #999,
                 ],
             ),
             arable_c_xarr,
@@ -493,31 +493,30 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     # -- Global Land Cover - Copernicus 2019 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
-            334: [0.1, 0.55],
+             20: [0.003, 0.05],
+             30: [0.01, 0.08],
+             40: [0.07, 0.2],
+             60: [0.1, 0.45],
+            #70: [0, 0],
+            #90: [0.01, 0.08],
+            100: [0.01, 0.1],
             111: [0.0001, 0.003],
-            113: [0.0001, 0.003],
             112: [0.0001, 0.003],
+            113: [0.0001, 0.003],
             114: [0.0001, 0.003],
             115: [0.0001, 0.003],
             116: [0.0001, 0.003],
             121: [0.0001, 0.003],
-            123: [0.0001, 0.003],
             122: [0.0001, 0.003],
+            123: [0.0001, 0.003],
             124: [0.0001, 0.003],
             125: [0.0001, 0.003],
             126: [0.0001, 0.003],
-            20: [0.003, 0.05],
-            30: [0.01, 0.08],
-            90: [0.01, 0.08],
-            100: [0.01, 0.1],
-            60: [0.1, 0.45],
-            40: [0.07, 0.2],
-            70: [0, 0],
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
-            np.isin(lulc_xarr, [50, 80, 200]),
-            0.27,
+            np.isin(lulc_xarr, [0, 50, 70, 80, 90, 200]),
+            np.nan,
             np.nan,
             lulc_xarr,
             new_name="Arable C",
@@ -825,9 +824,9 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {
             "r": [DataPath.R_EURO_PATH, Resampling.bilinear],
-            "k": [DataPath.K_EURO_PATH, Resampling.bilinear],
+            "k": [DataPath.K_EURO_PATH, Resampling.average],
             "lulc": [lulc_path, Resampling.nearest],
-            "p": [DataPath.P_EURO_PATH, Resampling.bilinear],
+            "p": [DataPath.P_EURO_PATH, Resampling.average],
         }
 
     if location == LocationType.GLOBAL_LEGACY.value:
@@ -848,9 +847,9 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {
             "r": [DataPath.R_EURO_PATH, Resampling.bilinear],
-            "k": [DataPath.K_GLOBAL_PATH, Resampling.bilinear],
+            "k": [DataPath.K_GLOBAL_PATH, Resampling.average],
             "lulc": [lulc_path, Resampling.nearest],
-            "p": [DataPath.P_EURO_PATH, Resampling.bilinear],
+            "p": [DataPath.P_EURO_PATH, Resampling.average],
         }
 
     if location == LocationType.GLOBAL.value:
@@ -865,7 +864,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         raster_dict = {
             "r": [DataPath.R_GLOBAL_PATH, Resampling.bilinear],
             "lulc": [lulc_path, Resampling.nearest],
-            "k": [DataPath.K_GLOBAL_PATH, Resampling.bilinear],
+            "k": [DataPath.K_GLOBAL_PATH, Resampling.average],
         }
 
     # -- Add the ls raster to the pre process dict if provided
