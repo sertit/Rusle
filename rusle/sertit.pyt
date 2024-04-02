@@ -17,6 +17,7 @@ class Rusle(object):
         self.label = "Rusle"
         self.description = ""
         self.canRunInBackground = False
+        self.category = "RRM"
 
     def getParameterInfo(self):
         """Define parameter definitions"""
