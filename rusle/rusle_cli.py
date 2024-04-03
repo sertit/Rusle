@@ -3,8 +3,10 @@ The rusle CLI will fail if you called this file directly. Call the root file rus
 """
 
 import sys
-import click
-
+try:
+    import rich_click as click
+except:
+    import click
 
 @click.command()
 @click.option(
