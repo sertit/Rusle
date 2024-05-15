@@ -88,7 +88,7 @@ class DataPath:
         cls.K_EURO_PATH = (
             cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
         )
-        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_factor_with_Ksat.tif"
+        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_GloSEM_factor.tif"
         cls.LS_EURO_PATH = (
             cls.GLOBAL_DIR
             / "European_Soil_Database_v2"
@@ -336,10 +336,11 @@ def produce_fcover(
     ndvi_max = ndvi_stat[0]["max"]
 
     # -- Fcover calculation
-    fcover_xarr = rasters.where(np.isnan(ndvi_crop_xarr), np.nan, (ndvi_crop_xarr - ndvi_min) / (ndvi_max - ndvi_min))
-    fcover_xarr = rasters.set_metadata(fcover_xarr, ndvi_crop_xarr, new_name="FCover")
+    fcover_xarr = (ndvi_crop_xarr - ndvi_min) / (ndvi_max - ndvi_min)
+    fcover_xarr_clean = rasters.where(ndvi_crop_xarr == -9999, np.nan, fcover_xarr)
+    fcover_xarr_clean = rasters.set_metadata(fcover_xarr_clean, ndvi_crop_xarr, new_name="FCover")
 
-    return fcover_xarr
+    return fcover_xarr_clean
 
 
 def produce_c_arable_europe(aoi_path: str, raster_xarr):
@@ -494,6 +495,7 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             124: [0.0001, 0.003],
             125: [0.0001, 0.003],
             126: [0.0001, 0.003],
+            334: [0.1, 0.55]
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
@@ -513,6 +515,7 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
              40: [0.07, 0.35],
              60: [0.1, 0.45],
             100: [0.01, 0.1],
+            334: [0.1, 0.55]
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
