@@ -49,11 +49,11 @@ except:
         [
             "Corine Land Cover - 2018 (100m)",
             "Global Land Cover - Copernicus 2019 (100m)",
-            "WorldCover - ESA 2021 (10m)"
+            "WorldCover - ESA 2021 (10m)",
             "P03",
         ]
     ),
-    default="Global Land Cover - Copernicus 2019 (100m)",
+    default="WorldCover - ESA 2021 (10m)",
     show_default=True,
 )
 @click.option(
