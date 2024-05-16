@@ -87,6 +87,7 @@ class Rusle(object):
         landcover.filter.list = [
             "Corine Land Cover - 2018 (100m)",
             "Global Land Cover - Copernicus 2019 (100m)",
+            "WorldCover - ESA 2021 (10m)",
             "P03",
         ]
         landcover.value = "Global Land Cover - Copernicus 2019 (100m)"
