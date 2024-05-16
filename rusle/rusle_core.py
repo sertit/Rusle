@@ -88,7 +88,7 @@ class DataPath:
         cls.K_EURO_PATH = (
             cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
         )
-        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_factor_with_Ksat.tif"
+        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_GloSEM_factor.tif"
         cls.LS_EURO_PATH = (
             cls.GLOBAL_DIR
             / "European_Soil_Database_v2"
@@ -118,6 +118,13 @@ class DataPath:
             / "Global_Land_Cover"
             / "2019"
             / "PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif"
+        )
+
+        cls.WC_PATH = (
+            cls.GLOBAL_DIR
+            / "ESA_WorldCover"
+            / "2021"
+            / "ESA_WorldCover_10m_2021.vrt"
         )
 
         cls.GC_PATH = (
@@ -173,6 +180,7 @@ class LandcoverType(ListEnum):
 
     CLC = "Corine Land Cover - 2018 (100m)"
     GLC = "Global Land Cover - Copernicus 2019 (100m)"
+    WC = "WorldCover - ESA 2021 (10m)"
     P03 = "P03"
 
 
@@ -208,6 +216,7 @@ class LandcoverStructure(ListEnum):
 
     CLC = "Corine Land Cover - 2018 (100m)"
     GLC = "Global Land Cover - Copernicus 2019 (100m)"
+    WC = "WorldCover - ESA 2021 (10m)"
     GC = "GlobCover - ESA 2005 (300m)"
     GL = "GlobeLand30 - China 2020 (30m)"
     P03 = "P03"
@@ -328,9 +337,10 @@ def produce_fcover(
 
     # -- Fcover calculation
     fcover_xarr = (ndvi_crop_xarr - ndvi_min) / (ndvi_max - ndvi_min)
-    fcover_xarr = rasters.set_metadata(fcover_xarr, ndvi_crop_xarr, new_name="FCover")
+    fcover_xarr_clean = rasters.where(ndvi_crop_xarr == -9999, np.nan, fcover_xarr)
+    fcover_xarr_clean = rasters.set_metadata(fcover_xarr_clean, ndvi_crop_xarr, new_name="FCover")
 
-    return fcover_xarr
+    return fcover_xarr_clean
 
 
 def produce_c_arable_europe(aoi_path: str, raster_xarr):
@@ -485,10 +495,31 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             124: [0.0001, 0.003],
             125: [0.0001, 0.003],
             126: [0.0001, 0.003],
+            334: [0.1, 0.55]
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
             np.isin(lulc_xarr, [0, 50, 70, 80, 90, 200]),
+            np.nan,
+            np.nan,
+            lulc_xarr,
+            new_name="Arable C",
+        )
+
+    # -- WorldCover - ESA 2021 (10m)
+    elif lulc_name == LandcoverStructure.WC.value:
+        cfactor_dict = {
+             10: [0.0001, 0.003],
+             20: [0.003, 0.05],
+             30: [0.01, 0.08],
+             40: [0.07, 0.35],
+             60: [0.1, 0.45],
+            100: [0.01, 0.1],
+            334: [0.1, 0.55]
+        }
+        # -- Produce arable c
+        arable_c_xarr = rasters.where(
+            np.isin(lulc_xarr, [50, 70, 80, 90, 95]),
             np.nan,
             np.nan,
             lulc_xarr,
@@ -785,6 +816,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     landcover_path_dict = {
         LandcoverType.CLC.value: DataPath.CLC_PATH,
         LandcoverType.GLC.value: DataPath.GLC_PATH,
+        LandcoverType.WC.value: DataPath.WC_PATH,
         LandcoverType.P03.value: p03_path,
     }
 
@@ -820,7 +852,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         # -- Dict that store raster to pre_process and the type of resampling
         raster_dict = {
             "r": [DataPath.R_EURO_PATH, Resampling.bilinear],
-            "k": [DataPath.K_GLOBAL_PATH, Resampling.average],
+            "k": [DataPath.K_EURO_PATH, Resampling.average],
             "lulc": [lulc_path, Resampling.nearest],
             "p": [DataPath.P_EURO_PATH, Resampling.average],
         }
