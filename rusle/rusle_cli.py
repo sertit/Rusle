@@ -1,12 +1,20 @@
 """
+This file is part of RUSLE.
+
+RUSLE is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with RUSLE. If not, see <https://www.gnu.org/licenses/>.
+"""
+
+"""
 The rusle CLI will fail if you called this file directly. Call the root file rusle.py.
 """
 
 import sys
-try:
-    import rich_click as click
-except:
-    import click
+import rich_click as click
+
 
 @click.command()
 @click.option(
@@ -60,7 +68,7 @@ except:
     "-fcp",
     "--fcover_path",
     help="Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. "
-    "If not provided, it will be calculated from nir and red bands or satellite products",
+         "If not provided, it will be calculated from nir and red bands or satellite products",
     type=click.Path(exists=True, resolve_path=True),
 )
 @click.option(
@@ -74,7 +82,7 @@ except:
     "-lsp",
     "--ls_path",
     help="Optional path to the Slope angle and length (LS factor) raster. "
-    "If not provided, it is calculated thanks to the DEM.",
+         "If not provided, it is calculated thanks to the DEM.",
     type=click.Path(exists=True, resolve_path=True),
 )
 @click.option(
@@ -124,22 +132,22 @@ except:
     default=False,
 )
 def compute_rusle(
-    aoi_path,
-    location,
-    nir_path,
-    red_path,
-    satellite_product,
-    landcover_name,
-    fcover_path,
-    p03_path,
-    del_path,
-    ls_path,
-    dem_name,
-    other_dem_path,
-    output_resolution,
-    epsg_code,
-    output,
-    ftep,
+        aoi_path,
+        location,
+        nir_path,
+        red_path,
+        satellite_product,
+        landcover_name,
+        fcover_path,
+        p03_path,
+        del_path,
+        ls_path,
+        dem_name,
+        other_dem_path,
+        output_resolution,
+        epsg_code,
+        output,
+        ftep,
 ):
     """
     Import osm charter with the CLI.
