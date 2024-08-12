@@ -147,3 +147,11 @@ Example:
 conda activate arcgispro-eo
 python rusle.py -aoi emsn073_aoi_32631.shp -loc "Europe" -nir T31TDH_20200805T104031_B08_10m.jp2 -red T31TDH_20200805T104031_B04_10m.jp2 -del emsn073_del_32631.shp -o output
 ```
+
+# Licence 
+
+Copyright (c) 2024 SERTIT, All rights reserved.
+
+Licensed under The GNU General Public License version 3 (GPLv3) (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.html
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
