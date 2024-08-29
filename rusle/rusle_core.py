@@ -1058,7 +1058,8 @@ def rusle_core(input_dict: dict) -> None:
         aoi_gpd_wkt = gpd.GeoSeries.from_wkt([aoi_raw_path])
         aoi_raw_path_wkt = os.path.join(tmp_dir, "aoi_from_wkt.shp")
 
-        aoi_gpd_wkt.to_file(aoi_raw_path_wkt, crs="EPSG:4326")
+        aoi_gpd_wkt_4326 = aoi_gpd_wkt.to_crs(4326)
+        aoi_gpd_wkt.to_file(aoi_gpd_wkt_4326)
         aoi_raw_path = aoi_raw_path_wkt
 
     # - Open aoi
