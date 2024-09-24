@@ -1237,7 +1237,7 @@ def rusle_core(input_dict: dict) -> None:
     aoi = vectors.read(aoi_path)
 
     # -- Write the a raster
-    a_path = os.path.join(output_dir, "a_rusle.tif")
+    a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
     a_xarr_clipped = a_xarr.rio.clip(aoi.geometry.values, aoi.crs)
     rasters.write(a_xarr_clipped, a_path)
 
@@ -1245,7 +1245,7 @@ def rusle_core(input_dict: dict) -> None:
     a_reclas_xarr = produce_a_reclass_arr(a_xarr)
 
     # -- Write the a raster
-    a_reclass_path = os.path.join(output_dir, "a_rusle_reclass.tif")
+    a_reclass_path = os.path.join(output_dir, "ErosionRisk.tif")
     a_reclas_xarr_clipped = a_reclas_xarr.rio.clip(aoi.geometry.values, aoi.crs)
     rasters.write(a_reclas_xarr_clipped, a_reclass_path)
 
