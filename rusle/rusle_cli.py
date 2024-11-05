@@ -131,6 +131,7 @@ import rich_click as click
     help="Set this flag if the command line is run on the ftep platform. ",
     default=False,
 )
+@click.version_option(message="%(prog)s version %(version)s !")
 def compute_rusle(
         aoi_path,
         location,
