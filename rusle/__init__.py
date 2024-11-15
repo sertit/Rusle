@@ -7,3 +7,5 @@ RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANT
 
 You should have received a copy of the GNU General Public License along with RUSLE. If not, see <https://www.gnu.org/licenses/>.
 """
+
+__version__ = "3.6.6"

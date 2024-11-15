@@ -20,30 +20,27 @@ __created__ = "24/02/2021"
 __update__ = "28/09/2023"
 __copyrights__ = "(c) SERTIT 2021"
 
-import os
+import gc
 import logging
+import os
+import sqlite3
 from enum import unique
 
 import cloudpathlib
-
-import sqlite3
-
+import geopandas as gpd
 import numpy as np
-import xarray as xr
 import rasterio
+import xarray
+import xarray as xr
+from eoreader.bands import NIR, RED
+from eoreader.reader import Reader
+from pysheds.grid import Grid
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
-import geopandas as gpd
 from rasterstats import zonal_stats
-
-from sertit import strings, misc, rasters, files, vectors, AnyPath
+from sertit import AnyPath, files, misc, rasters, strings, vectors
 from sertit.misc import ListEnum
-
-from pysheds.grid import Grid
 from sertit.unistra import get_geodatastore, s3_env
-from eoreader.reader import Reader
-from eoreader.bands import NIR, RED
-import xarray
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -98,7 +95,13 @@ class DataPath:
         cls.K_EURO_PATH = (
             cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "K_new_crop.tif"
         )
-        cls.K_GLOBAL_PATH = cls.GLOBAL_DIR / "European_Soil_Database_v2" / "Kfactor" / "Global" / "K_GloSEM_factor.tif"
+        cls.K_GLOBAL_PATH = (
+            cls.GLOBAL_DIR
+            / "European_Soil_Database_v2"
+            / "Kfactor"
+            / "Global"
+            / "K_GloSEM_factor.tif"
+        )
         cls.LS_EURO_PATH = (
             cls.GLOBAL_DIR
             / "European_Soil_Database_v2"
@@ -131,10 +134,7 @@ class DataPath:
         )
 
         cls.WC_PATH = (
-            cls.GLOBAL_DIR
-            / "ESA_WorldCover"
-            / "2021"
-            / "ESA_WorldCover_10m_2021.vrt"
+            cls.GLOBAL_DIR / "ESA_WorldCover" / "2021" / "ESA_WorldCover_10m_2021.vrt"
         )
 
         cls.GC_PATH = (
@@ -348,7 +348,9 @@ def produce_fcover(
     # -- Fcover calculation
     fcover_xarr = (ndvi_crop_xarr - ndvi_min) / (ndvi_max - ndvi_min)
     fcover_xarr_clean = rasters.where(ndvi_crop_xarr == -9999, np.nan, fcover_xarr)
-    fcover_xarr_clean = rasters.set_metadata(fcover_xarr_clean, ndvi_crop_xarr, new_name="FCover")
+    fcover_xarr_clean = rasters.set_metadata(
+        fcover_xarr_clean, ndvi_crop_xarr, new_name="FCover"
+    )
 
     return fcover_xarr_clean
 
@@ -488,10 +490,10 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     # -- Global Land Cover - Copernicus 2019 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
         cfactor_dict = {
-             20: [0.003, 0.05],
-             30: [0.01, 0.08],
-             40: [0.07, 0.2],
-             60: [0.1, 0.45],
+            20: [0.003, 0.05],
+            30: [0.01, 0.08],
+            40: [0.07, 0.2],
+            60: [0.1, 0.45],
             100: [0.01, 0.1],
             111: [0.0001, 0.003],
             112: [0.0001, 0.003],
@@ -505,7 +507,7 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
             124: [0.0001, 0.003],
             125: [0.0001, 0.003],
             126: [0.0001, 0.003],
-            334: [0.1, 0.55]
+            334: [0.1, 0.55],
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
@@ -519,13 +521,13 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     # -- WorldCover - ESA 2021 (10m)
     elif lulc_name == LandcoverStructure.WC.value:
         cfactor_dict = {
-             10: [0.0001, 0.003],
-             20: [0.003, 0.05],
-             30: [0.01, 0.08],
-             40: [0.07, 0.35],
-             60: [0.1, 0.45],
+            10: [0.0001, 0.003],
+            20: [0.003, 0.05],
+            30: [0.01, 0.08],
+            40: [0.07, 0.35],
+            60: [0.1, 0.45],
             100: [0.01, 0.1],
-            334: [0.1, 0.55]
+            334: [0.1, 0.55],
         }
         # -- Produce arable c
         arable_c_xarr = rasters.where(
@@ -815,12 +817,7 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
     landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
     p03_path = input_dict.get(InputParameters.P03_PATH.value)
     ls_path = input_dict.get(InputParameters.LS_PATH.value)
-    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
-
-    # -- Create temp_dir if not exist
-    tmp_dir = os.path.join(output_dir, "temp_dir")
-    if not os.path.exists(tmp_dir):
-        os.makedirs(tmp_dir)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
 
     # -- Dict that store landcover name and landcover path
     landcover_path_dict = {
@@ -983,6 +980,8 @@ def raster_pre_processing(
             # -- Store path result in a dict
             out_dict[key] = raster_path_out
 
+        gc.collect()
+
     return out_dict
 
 
@@ -1035,33 +1034,10 @@ def produce_a_reclass_arr(a_xarr):
     return a_xarr.copy(data=a_reclass_arr)
 
 
-def rusle_core(input_dict: dict) -> None:
-    """
-    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
-
-    Args:
-        input_dict (dict) : Input dict containing all needed values
-    """
-
-    # --- Extract parameters ---
+def aoi_buffer(input_dict):
     aoi_raw_path = input_dict.get(InputParameters.AOI_PATH.value)
-    location = input_dict.get(InputParameters.LOCATION.value)
-    fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
-    landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
-    del_path = input_dict.get(InputParameters.DEL_PATH.value)
-    ls_path = input_dict.get(InputParameters.LS_PATH.value)
-    dem_name = input_dict.get(InputParameters.DEM_NAME.value)
-    other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
-    output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
-    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
-    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
     tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
-
-    # --- Create temp_dir if not exist ---
-    if tmp_dir is None or not AnyPath(tmp_dir).is_absolute():
-        tmp_dir = os.path.join(output_dir, "temp_dir")
-    if not os.path.exists(tmp_dir):
-        os.makedirs(tmp_dir)
+    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
 
     # Write wkt string input to shapefile
     if aoi_raw_path.startswith("POLYGON"):
@@ -1078,7 +1054,7 @@ def rusle_core(input_dict: dict) -> None:
     # -- Extract the epsg code from the reference system parameter
     if ref_epsg is None:
         ref_epsg = aoi_gdf.estimate_utm_crs().to_epsg()
-    ref_crs = CRS.from_epsg(ref_epsg)
+        input_dict[InputParameters.REF_EPSG.value] = ref_epsg
 
     # - Reproject aoi
     aoi_gdf = aoi_gdf.to_crs(ref_epsg)
@@ -1097,19 +1073,56 @@ def rusle_core(input_dict: dict) -> None:
     # Change the path in the input_dict
     input_dict[InputParameters.AOI_PATH.value] = aoi_path
 
-    # --- Check if parameters values are ok ---
+
+def create_tmp_dir(input_dict):
+    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+    # --- Create temp_dir if not exist ---
+    if tmp_dir is None or not AnyPath(tmp_dir).is_absolute():
+        tmp_dir = os.path.join(output_dir, "temp_dir")
+    if not os.path.exists(tmp_dir):
+        os.makedirs(tmp_dir)
+    input_dict[InputParameters.TMP_DIR.value] = tmp_dir
+
+
+def rusle_core(input_dict: dict) -> None:
+    """
+    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
+
+    Args:
+        input_dict (dict) : Input dict containing all needed values
+    """
+
+    create_tmp_dir(input_dict)
+    aoi_buffer(input_dict)
     check_parameters(input_dict)
+
+    # --- Extract parameters ---
+    location = input_dict.get(InputParameters.LOCATION.value)
+    fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
+    landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
+    del_path = input_dict.get(InputParameters.DEL_PATH.value)
+    ls_path = input_dict.get(InputParameters.LS_PATH.value)
+    dem_name = input_dict.get(InputParameters.DEM_NAME.value)
+    other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
+    output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
+    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
+    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
+
+    aoi_gdf = vectors.read(aoi_path)
+    ref_crs = CRS.from_epsg(ref_epsg)
 
     # --- Make the list of raster to pre-process ---
     raster_dict = make_raster_list_to_pre_process(input_dict)
+    gc.collect()
 
     # --- Pre-process raster ---
     # -- Run pre process
     post_process_dict = raster_pre_processing(
         aoi_path, output_resolution, CRS.from_epsg(ref_epsg), raster_dict, tmp_dir
     )
-    # -- Read the aoi file
-    aoi_gdf = gpd.read_file(aoi_path)
 
     # -- Check if ls need to be calculated or not
     if ls_path is None:
@@ -1210,7 +1223,10 @@ def rusle_core(input_dict: dict) -> None:
     rasters.write(c_xarr, c_out)  # , nodata=0)
 
     # -- Produce p if location is GLOBAL
-    if location == LocationType.GLOBAL.value or location == LocationType.GLOBAL_LEGACY.value:
+    if (
+        location == LocationType.GLOBAL.value
+        or location == LocationType.GLOBAL_LEGACY.value
+    ):
         # -- Produce p
         p_value = 1  # Can change
         p_xarr = xr.full_like(c_xarr, fill_value=p_value)
@@ -1218,7 +1234,10 @@ def rusle_core(input_dict: dict) -> None:
         # -- Write p
         p_path = os.path.join(tmp_dir, "p.tif")
         rasters.write(p_xarr, p_path)  # , nodata=0)
-    elif location == LocationType.EUROPE.value or location == LocationType.EUROPE_LEGACY.value:
+    elif (
+        location == LocationType.EUROPE.value
+        or location == LocationType.EUROPE_LEGACY.value
+    ):
         p_xarr = rasters.read(post_process_dict["p"], window=aoi_gdf)
     else:
         raise ValueError(f"Unknown Location Type {location}")
