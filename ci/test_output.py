@@ -5,7 +5,7 @@
 import os
 import tempfile
 
-from sertit import AnyPath, ci, unistra
+from sertit import AnyPath, ci
 from sertit.unistra import s3_env
 
 from rusle.rusle_core import DataPath, rusle_core

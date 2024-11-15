@@ -1,24 +1,16 @@
 """
 This file is part of RUSLE.
 
-RUSLE is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+RUSLE is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with RUSLE. If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License along with RUSLE.
+If not, see <https://www.gnu.org/licenses/>.
 """
-
-"""
-Processing the Mean (annual) soil loss (in ton/ha/year) with the RUSLE model.
-
-"""
-
-__author__ = "Ledauphin Thomas"
-__contact__ = "tledauphin@unistra.fr"
-__python__ = "3.7.0"
-__created__ = "24/02/2021"
-__update__ = "28/09/2023"
-__copyrights__ = "(c) SERTIT 2021"
 
 import gc
 import logging
@@ -40,7 +32,7 @@ from rasterio.enums import Resampling
 from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, strings, vectors
 from sertit.misc import ListEnum
-from sertit.unistra import get_geodatastore, s3_env
+from sertit.unistra import get_geodatastore
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -249,11 +241,11 @@ def check_parameters(input_dict: dict) -> None:
 
     # -- Check if P03 if needed
     if (landcover_name == LandcoverType.P03.value) and (p03_path is None):
-        raise ValueError(f"P03_path is needed !")
+        raise ValueError("P03_path is needed !")
 
     # --  Check if other dem path if needed
     if (dem_name == DemType.OTHER.value) and (other_dem_path is None):
-        raise ValueError(f"Dem path is needed !")
+        raise ValueError("Dem path is needed !")
 
     return
 
