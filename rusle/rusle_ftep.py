@@ -8,12 +8,12 @@ RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANT
 You should have received a copy of the GNU General Public License along with RUSLE. If not, see <https://www.gnu.org/licenses/>.
 """
 
+import logging.handlers
 import os
+import sys
 
 import ftep_util as ftep
-import logging.handlers
 from sertit import AnyPath, s3
-import sys
 
 DEBUG = False
 LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
@@ -42,12 +42,13 @@ def compute_rusle():
     )
 
     from sertit import logs
+
     from rusle.rusle_core import (
         LOGGER,
         LOGGING_FORMAT,
-        rusle_core,
-        InputParameters,
         DataPath,
+        InputParameters,
+        rusle_core,
     )
 
     logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)

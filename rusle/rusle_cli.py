@@ -13,6 +13,7 @@ The rusle CLI will fail if you called this file directly. Call the root file rus
 """
 
 import sys
+
 import rich_click as click
 
 
@@ -35,13 +36,13 @@ import rich_click as click
     "-nir",
     "--nir_path",
     help="NIR band path needed if no fcover raster is provided.",
-    type=click.Path(exists=True, resolve_path=True),
+    type=click.Path(resolve_path=True),
 )
 @click.option(
     "-red",
     "--red_path",
     help="RED band path needed if no fcover raster is provided.",
-    type=click.Path(exists=True, resolve_path=True),
+    type=click.Path(resolve_path=True),
 )
 @click.option(
     "--satellite_product",
@@ -68,7 +69,7 @@ import rich_click as click
     "-fcp",
     "--fcover_path",
     help="Path to a Fraction of green Vegetation Coverportal (Fcover) raster file. "
-         "If not provided, it will be calculated from nir and red bands or satellite products",
+    "If not provided, it will be calculated from nir and red bands or satellite products",
     type=click.Path(exists=True, resolve_path=True),
 )
 @click.option(
@@ -82,7 +83,7 @@ import rich_click as click
     "-lsp",
     "--ls_path",
     help="Optional path to the Slope angle and length (LS factor) raster. "
-         "If not provided, it is calculated thanks to the DEM.",
+    "If not provided, it is calculated thanks to the DEM.",
     type=click.Path(exists=True, resolve_path=True),
 )
 @click.option(
@@ -133,22 +134,22 @@ import rich_click as click
 )
 @click.version_option(message="%(prog)s version %(version)s !")
 def compute_rusle(
-        aoi_path,
-        location,
-        nir_path,
-        red_path,
-        satellite_product,
-        landcover_name,
-        fcover_path,
-        p03_path,
-        del_path,
-        ls_path,
-        dem_name,
-        other_dem_path,
-        output_resolution,
-        epsg_code,
-        output,
-        ftep,
+    aoi_path,
+    location,
+    nir_path,
+    red_path,
+    satellite_product,
+    landcover_name,
+    fcover_path,
+    p03_path,
+    del_path,
+    ls_path,
+    dem_name,
+    other_dem_path,
+    output_resolution,
+    epsg_code,
+    output,
+    ftep,
 ):
     """
     Import osm charter with the CLI.
@@ -159,14 +160,15 @@ def compute_rusle(
 
     logging.warning("Importing libraries, it may take a while...")
     from sertit import logs
+    from sertit.unistra import unistra_s3
+
     from rusle.rusle_core import (
-        InputParameters,
-        DataPath,
-        rusle_core,
         LOGGER,
         LOGGING_FORMAT,
+        DataPath,
+        InputParameters,
+        rusle_core,
     )
-    from sertit.unistra import unistra_s3
 
     with unistra_s3():
         logs.init_logger(LOGGER, logging.INFO, LOGGING_FORMAT)
