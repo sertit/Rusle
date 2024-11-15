@@ -1,11 +1,15 @@
 """
 This file is part of RUSLE.
 
-RUSLE is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+RUSLE is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+RUSLE is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with RUSLE. If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License along with RUSLE.
+If not, see <https://www.gnu.org/licenses/>.
 """
 
 import logging.handlers
@@ -13,7 +17,7 @@ import os
 import sys
 
 import ftep_util as ftep
-from sertit import AnyPath, s3
+from sertit import s3
 
 DEBUG = False
 LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
@@ -77,7 +81,7 @@ def compute_rusle():
         LOGGER.info("--- RUSLE was a success.")
         sys.exit(0)
 
-    except Exception as ex:
+    except Exception:
         LOGGER.error("RUSLE has failed:", exc_info=True)
         sys.exit(1)
 
