@@ -32,6 +32,7 @@ def ftep_s3_env(*args, **kwargs):
 
 @ftep_s3_env
 def compute_rusle():
+    os.environ["AWS_VIRTUAL_HOSTING"] = "False"
     parameters_file_path = "/home/worker/workDir/FTEP-WPS-INPUT.properties"
     # Default parameter values
     params = ftep.Params(parameters_file_path)
