@@ -344,6 +344,10 @@ def produce_fcover(
         fcover_xarr_clean, ndvi_crop_xarr, new_name="FCover"
     )
 
+    # -- Write fcover
+    fcover_path = os.path.join(tmp_dir, "fcover.tif")
+    rasters.write(fcover_xarr_clean, fcover_path)  # , nodata=0)
+
     return fcover_xarr_clean
 
 
@@ -426,7 +430,7 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
     return arable_c_xarr
 
 
-def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
+def produce_c(input_dict, post_process_dict):
     """
     Produce C index
     Args:
@@ -441,6 +445,55 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     LOGGER.info("-- Produce C index --")
     # --- Identify Cfactor
     # -- Cfactor dict and c_arr_arable
+
+    fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
+    del_path = input_dict.get(InputParameters.DEL_PATH.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
+    ref_crs = CRS.from_epsg(ref_epsg)
+    output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
+    aoi_gdf = vectors.read(aoi_path)
+    lulc_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
+
+    # -- Check if fcover need to be calculated or not
+    if fcover_path is None:
+        # -- Process fcover
+        red_process_path = post_process_dict["red"]
+        nir_process_path = post_process_dict["nir"]
+        fcover_xarr = produce_fcover(
+            red_process_path,
+            nir_process_path,
+            aoi_path,
+            tmp_dir,
+            ref_crs,
+            output_resolution,
+        )
+
+    else:
+        fcover_xarr = rasters.read(post_process_dict["fcover"], window=aoi_gdf)
+
+    # -- Mask lulc if del
+    if del_path:
+        # -- Update the lulc with the DEL
+        LOGGER.info("-- Update raster values covered by DEL --")
+
+        # -- DEM to gdf
+        del_gdf = gpd.read_file(del_path)
+
+        # -- Update the lulc with the del
+        lulc_process_path = post_process_dict["lulc"]
+        lulc_del_xarr = rasters.paint(lulc_process_path, del_gdf, value=334)
+
+        # -- Write the lulc with fire
+        lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
+        rasters.write(lulc_del_xarr, lulc_masked_path)  # , nodata=0)
+
+        lulc_xarr = lulc_del_xarr.copy()
+
+    else:
+        # -- Open the lulc raster
+        lulc_xarr = rasters.read(post_process_dict["lulc"], window=aoi_gdf)
 
     if (lulc_name == LandcoverStructure.CLC.value) or (
         lulc_name == LandcoverType.P03.value
@@ -597,10 +650,15 @@ def produce_c(lulc_xarr, fcover_xarr, aoi_path: str, lulc_name: str):
     # -- Merge arable and non arable c values
     c_arr = np.where(np.isnan(c_arr_non_arable), arable_c_xarr, c_arr_non_arable)
 
-    return arable_c_xarr.copy(data=c_arr)
+    ret = arable_c_xarr.copy(data=c_arr)
+    # -- Write c raster
+    c_out = os.path.join(tmp_dir, "c.tif")
+    rasters.write(ret, c_out)  # , nodata=0)
+
+    return ret
 
 
-def produce_ls_factor(dem_path: str, tmp_dir: str):
+def produce_ls_factor_raw(dem_path: str, tmp_dir: str):
     """
     Produce the LS factor raster
     Args:
@@ -977,7 +1035,7 @@ def raster_pre_processing(
     return out_dict
 
 
-def produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr):
+def produce_a_arr(input_dict):
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
@@ -990,6 +1048,45 @@ def produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr):
     Returns:
         xarray of the average annual soil loss (ton/ha/year)
     """
+
+    output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
+    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+
+    # --- Make the list of raster to pre-process ---
+    raster_dict = make_raster_list_to_pre_process(input_dict)
+    gc.collect()
+
+    # --- Pre-process raster ---
+    # -- Run pre process
+    post_process_dict = raster_pre_processing(
+        aoi_path, output_resolution, CRS.from_epsg(ref_epsg), raster_dict, tmp_dir
+    )
+
+    ls_path = input_dict.get(InputParameters.LS_PATH.value)
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
+
+    aoi_gdf = vectors.read(aoi_path)
+
+    # -- Check if ls need to be calculated or not
+    if ls_path is None:
+        ls_xarr = produce_ls(input_dict, post_process_dict)
+    else:
+        ls_xarr = rasters.read(post_process_dict["ls"], window=aoi_gdf)
+
+    # Process C
+    c_xarr = produce_c(input_dict, post_process_dict)
+
+    # Process p
+    # p_xarr = produce_p(input_dict, post_process_dict, c_xarr)
+
+    # Open r
+    r_xarr = rasters.read(post_process_dict["r"], window=aoi_gdf)
+
+    #  Open k
+    k_xarr = rasters.read(post_process_dict["k"], window=aoi_gdf)
+
     LOGGER.info(
         "-- Produce average annual soil loss (ton/ha/year) with the RUSLE model --"
     )
@@ -1006,24 +1103,21 @@ def produce_a_reclass_arr(a_xarr):
     Returns:
         xarray of the reclassified a raster
     """
-
     LOGGER.info("-- Produce the reclassified a --")
 
     # -- List conditions and choices
-    a_arr = a_xarr.data
     conditions = [
-        (a_arr < 6.7),
-        (a_arr >= 6.7) & (a_arr < 11.2),
-        (a_arr >= 11.2) & (a_arr < 22.4),
-        (a_arr >= 22.4) & (a_arr < 33.6),
-        (a_arr >= 33.6),
+        (a_xarr.data < 6.7),
+        (a_xarr.data >= 6.7) & (a_xarr.data < 11.2),
+        (a_xarr.data >= 11.2) & (a_xarr.data < 22.4),
+        (a_xarr.data >= 22.4) & (a_xarr.data < 33.6),
+        (a_xarr.data >= 33.6),
     ]
-    choices = [1, 2, 3, 4, 5]
 
-    # -- Update arr with k values
-    a_reclass_arr = np.select(conditions, choices, default=np.nan)
+    for i, condition in enumerate(conditions):
+        a_xarr.data = xr.where(condition, i + 1, a_xarr.data)
 
-    return a_xarr.copy(data=a_reclass_arr)
+    return a_xarr
 
 
 def aoi_buffer(input_dict):
@@ -1077,143 +1171,65 @@ def create_tmp_dir(input_dict):
     input_dict[InputParameters.TMP_DIR.value] = tmp_dir
 
 
-def rusle_core(input_dict: dict) -> None:
-    """
-    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
-
-    Args:
-        input_dict (dict) : Input dict containing all needed values
-    """
-
-    create_tmp_dir(input_dict)
-    aoi_buffer(input_dict)
-    check_parameters(input_dict)
-
-    # --- Extract parameters ---
-    location = input_dict.get(InputParameters.LOCATION.value)
-    fcover_path = input_dict.get(InputParameters.FCOVER_PATH.value)
-    landcover_name = input_dict.get(InputParameters.LANDCOVER_NAME.value)
-    del_path = input_dict.get(InputParameters.DEL_PATH.value)
-    ls_path = input_dict.get(InputParameters.LS_PATH.value)
+def produce_ls(input_dict, post_process_dict):
     dem_name = input_dict.get(InputParameters.DEM_NAME.value)
     other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
-    output_resolution = input_dict.get(InputParameters.OUTPUT_RESOLUTION.value)
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
     ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
-    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+
+    aoi_gdf = vectors.read(aoi_path)
+    ref_crs = CRS.from_epsg(ref_epsg)
+    # -- Dict that store dem_name with path
+    dem_dict = {
+        DemType.EUDEM.value: DataPath.EUDEM_PATH,
+        DemType.SRTM.value: DataPath.SRTM30_PATH,
+        DemType.MERIT.value: DataPath.MERIT_PATH,
+        DemType.COPDEM_30.value: DataPath.COPDEM30_PATH,
+        DemType.OTHER.value: other_dem_path,
+    }
+
+    # --- Pre-process the DEM ---
+    # -- Extract DEM path
+    dem_path = dem_dict[dem_name]
+
+    # Read the raster
+    dem_xarr = rasters.read(dem_path, window=aoi_gdf)
+
+    # -- Reproj DEM
+    dem_reproj_xarr = dem_xarr.rio.reproject(ref_crs, resampling=Resampling.bilinear)
+
+    # -- Crop DEM
+    dem_crop_xarr = rasters.crop(dem_reproj_xarr, aoi_gdf, from_disk=True)
+
+    # --- Write reproj DEM
+    dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
+    rasters.write(dem_crop_xarr, dem_reproj_path)  # , nodata=0)
+
+    # --- Produce ls ---
+    ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
+
+    # -- Collocate ls with the other results
+    ls_xarr = rasters.collocate(
+        rasters.read(
+            post_process_dict[list(post_process_dict.keys())[0]], window=aoi_gdf
+        ),
+        ls_raw_xarr,
+        Resampling.bilinear,
+    )
+
+    # -- Write ls
+    ls_path = os.path.join(tmp_dir, "ls.tif")
+    rasters.write(ls_xarr, ls_path)  # , nodata=0)
+    return ls_xarr
+
+
+def produce_p(input_dict, post_process_dict, c_xarr):
+    location = input_dict.get(InputParameters.LOCATION.value)
     tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
     aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
 
     aoi_gdf = vectors.read(aoi_path)
-    ref_crs = CRS.from_epsg(ref_epsg)
-
-    # --- Make the list of raster to pre-process ---
-    raster_dict = make_raster_list_to_pre_process(input_dict)
-    gc.collect()
-
-    # --- Pre-process raster ---
-    # -- Run pre process
-    post_process_dict = raster_pre_processing(
-        aoi_path, output_resolution, CRS.from_epsg(ref_epsg), raster_dict, tmp_dir
-    )
-
-    # -- Check if ls need to be calculated or not
-    if ls_path is None:
-        # -- Dict that store dem_name with path
-        dem_dict = {
-            DemType.EUDEM.value: DataPath.EUDEM_PATH,
-            DemType.SRTM.value: DataPath.SRTM30_PATH,
-            DemType.MERIT.value: DataPath.MERIT_PATH,
-            DemType.COPDEM_30.value: DataPath.COPDEM30_PATH,
-            DemType.OTHER.value: other_dem_path,
-        }
-
-        # --- Pre-process the DEM ---
-        # -- Extract DEM path
-        dem_path = dem_dict[dem_name]
-
-        # Read the raster
-        dem_xarr = rasters.read(dem_path, window=aoi_gdf)
-
-        # -- Reproj DEM
-        dem_reproj_xarr = dem_xarr.rio.reproject(
-            ref_crs, resampling=Resampling.bilinear
-        )
-
-        # -- Crop DEM
-        dem_crop_xarr = rasters.crop(dem_reproj_xarr, aoi_gdf, from_disk=True)
-
-        # --- Write reproj DEM
-        dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
-        rasters.write(dem_crop_xarr, dem_reproj_path)  # , nodata=0)
-
-        # --- Produce ls ---
-        ls_raw_xarr = produce_ls_factor(dem_reproj_path, tmp_dir)
-
-        # -- Collocate ls with the other results
-        ls_xarr = rasters.collocate(
-            rasters.read(
-                post_process_dict[list(post_process_dict.keys())[0]], window=aoi_gdf
-            ),
-            ls_raw_xarr,
-            Resampling.bilinear,
-        )
-
-        # -- Write ls
-        ls_path = os.path.join(tmp_dir, "ls.tif")
-        rasters.write(ls_xarr, ls_path)  # , nodata=0)
-    else:
-        ls_xarr = rasters.read(post_process_dict["ls"], window=aoi_gdf)
-
-    # -- Check if fcover need to be calculated or not
-    if fcover_path is None:
-        # -- Process fcover
-        red_process_path = post_process_dict["red"]
-        nir_process_path = post_process_dict["nir"]
-        fcover_xarr = produce_fcover(
-            red_process_path,
-            nir_process_path,
-            aoi_path,
-            tmp_dir,
-            ref_crs,
-            output_resolution,
-        )
-
-        # -- Write fcover
-        fcover_path = os.path.join(tmp_dir, "fcover.tif")
-        rasters.write(fcover_xarr, fcover_path)  # , nodata=0)
-
-    else:
-        fcover_xarr = rasters.read(post_process_dict["fcover"], window=aoi_gdf)
-
-    # -- Mask lulc if del
-    if del_path:
-        # -- Update the lulc with the DEL
-        LOGGER.info("-- Update raster values covered by DEL --")
-
-        # -- DEM to gdf
-        del_gdf = gpd.read_file(del_path)
-
-        # -- Update the lulc with the del
-        lulc_process_path = post_process_dict["lulc"]
-        lulc_del_xarr = rasters.paint(lulc_process_path, del_gdf, value=334)
-
-        # -- Write the lulc with fire
-        lulc_masked_path = os.path.join(tmp_dir, "lulc_with_fire.tif")
-        rasters.write(lulc_del_xarr, lulc_masked_path)  # , nodata=0)
-
-        lulc_xarr = lulc_del_xarr.copy()
-
-    else:
-        # -- Open the lulc raster
-        lulc_xarr = rasters.read(post_process_dict["lulc"], window=aoi_gdf)
-
-    # -- Process C
-    c_xarr = produce_c(lulc_xarr, fcover_xarr, aoi_path, landcover_name)
-
-    # -- Write c raster
-    c_out = os.path.join(tmp_dir, "c.tif")
-    rasters.write(c_xarr, c_out)  # , nodata=0)
-
     # -- Produce p if location is GLOBAL
     if (
         location == LocationType.GLOBAL.value
@@ -1234,14 +1250,28 @@ def rusle_core(input_dict: dict) -> None:
     else:
         raise ValueError(f"Unknown Location Type {location}")
 
-    # -- Open r
-    r_xarr = rasters.read(post_process_dict["r"], window=aoi_gdf)
+    return p_xarr
 
-    # -- Open k
-    k_xarr = rasters.read(post_process_dict["k"], window=aoi_gdf)
 
-    # -- Produce a with RUSLE model
-    a_xarr = produce_a_arr(r_xarr, k_xarr, ls_xarr, c_xarr, p_xarr)
+def rusle_core(input_dict: dict) -> None:
+    """
+    Produce average annual soil loss (ton/ha/year) with the RUSLE model.
+
+    Args:
+        input_dict (dict) : Input dict containing all needed values
+    """
+
+    create_tmp_dir(input_dict)
+    aoi_buffer(input_dict)
+    check_parameters(input_dict)
+
+    # --- Extract parameters ---
+    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+
+    # Produce a with RUSLE model
+    a_xarr = produce_a_arr(input_dict)
+    gc.collect()
 
     # Reload AOI to clip the output raster to the AOI
     aoi_path = os.path.join(tmp_dir, "aoi.shp")
@@ -1251,9 +1281,13 @@ def rusle_core(input_dict: dict) -> None:
     a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
     a_xarr_clipped = a_xarr.rio.clip(aoi.geometry.values, aoi.crs)
     rasters.write(a_xarr_clipped, a_path)
+    del a_xarr_clipped
+    gc.collect()
 
     # -- Reclass a
     a_reclas_xarr = produce_a_reclass_arr(a_xarr)
+    del a_xarr
+    gc.collect()
 
     # -- Write the a raster
     a_reclass_path = os.path.join(output_dir, "ErosionRisk.tif")
