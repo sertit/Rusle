@@ -52,7 +52,7 @@ def geodatastore(ftep=False):
 
     """
     if ftep:
-        return AnyPath("s3://eo4sdg-data")
+        return AnyPath("s3://eo4sdg-data-sertit")
     else:
         return get_geodatastore()
 
