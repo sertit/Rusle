@@ -40,5 +40,3 @@ deploy_registry:
     # Manual deploy if commit to the default branch
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: manual
-
-

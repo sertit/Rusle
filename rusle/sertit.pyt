@@ -10,6 +10,7 @@ You should have received a copy of the GNU General Public License along with RUS
 
 import arcpy
 
+
 class Toolbox(object):
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
@@ -143,7 +144,13 @@ class Rusle(object):
         )
 
         dem.filter.type = "ValueList"
-        dem.filter.list = ["COPDEM 30m", "EUDEM 25m", "SRTM 30m", "MERIT 5 deg", "Other"]
+        dem.filter.list = [
+            "COPDEM 30m",
+            "EUDEM 25m",
+            "SRTM 30m",
+            "MERIT 5 deg",
+            "Other",
+        ]
         dem.value = "COPDEM 30m"
 
         # Dem Raster path
@@ -244,6 +251,7 @@ class Rusle(object):
         added to the display."""
         return
 
+
 def epsg_from_arcgis_proj(arcgis_proj):
     """
     Extract espg code from arcgis proj
@@ -269,12 +277,14 @@ def epsg_from_arcgis_proj(arcgis_proj):
 def main_arcgis(parameters, messsages):
 
     import logging
+
     import arcpy
-    from sertit.arcpy import init_conda_arcpy_env, ArcPyLogger, feature_layer_to_path
+    from sertit.arcpy import ArcPyLogger, feature_layer_to_path, init_conda_arcpy_env
 
     init_conda_arcpy_env()
 
-    from rusle.rusle_core import rusle_core, InputParameters, DataPath
+    from rusle.rusle_core import DataPath, InputParameters, rusle_core
+
     # Don't concatenate or edit variable names of the two following lines unless
     # you don't want logs
     arcpy_logger = ArcPyLogger("RUSLE")

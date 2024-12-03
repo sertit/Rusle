@@ -16,16 +16,18 @@ import gc
 import logging
 import os
 import sqlite3
+import warnings
 from enum import unique
 
 import cloudpathlib
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio
 import xarray
-import xarray as xr
 from eoreader.bands import NIR, RED
 from eoreader.reader import Reader
+from odc.geo import xr  # noqa
 from pysheds.grid import Grid
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
@@ -145,6 +147,7 @@ class DataPath:
             / "MERIT_DEM.vrt"
         )
         cls.COPDEM30_PATH = cls.GLOBAL_DIR / "COPDEM_30m" / "COPDEM_30m.vrt"
+        cls.GADM_PATH = cls.GLOBAL_DIR / "GADM" / "gadm_410.gdb"
 
     # Buffer apply to the AOI
     AOI_BUFFER = 5000
@@ -996,8 +999,12 @@ def raster_pre_processing(
         # -- Add path to the dictionary
         if ref_xarr is None:
             # -- Re project raster and resample
-            raster_reproj_xarr = raster_xarr.rio.reproject(
-                dst_crs, resolution=dst_resolution, resampling=resampling_method
+
+            raster_reproj_xarr = raster_xarr.odc.reproject(
+                how=dst_crs,
+                resolution=dst_resolution,
+                resampling=resampling_method,
+                dst_nodata=rasters.FLOAT_NODATA,
             )
 
             # -- Crop raster with AOI
@@ -1115,7 +1122,7 @@ def produce_a_reclass_arr(a_xarr):
     ]
 
     for i, condition in enumerate(conditions):
-        a_xarr.data = xr.where(condition, i + 1, a_xarr.data)
+        a_xarr.data = xarray.where(condition, i + 1, a_xarr.data)
 
     return a_xarr
 
@@ -1167,7 +1174,7 @@ def create_tmp_dir(input_dict):
     if tmp_dir is None or not AnyPath(tmp_dir).is_absolute():
         tmp_dir = os.path.join(output_dir, "temp_dir")
     if not os.path.exists(tmp_dir):
-        os.makedirs(tmp_dir)
+        os.makedirs(tmp_dir, exist_ok=True)
     input_dict[InputParameters.TMP_DIR.value] = tmp_dir
 
 
@@ -1253,6 +1260,114 @@ def produce_p(input_dict, post_process_dict, c_xarr):
     return p_xarr
 
 
+def compute_statistics(input_dict, susceptibility_path):
+    """
+    This function allows the zonal statistics and formatting of the geodataframe
+    for the LSI statistics based on Deparments level 0, 1 and 2 for the GADM layer
+    Args:
+        gadm_layer: geodataframe already cropped to the AOI
+        raster_path: Path for the LSI raster
+    Returns:
+        Geodataframe with the statistics data for each of the Levels 0,1 and 2 availables
+        in the AOI.
+    """
+    ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
+    ref_crs = CRS.from_epsg(ref_epsg)
+
+    # Read GADM layer and overlay with AOI
+    aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
+    aoi = vectors.read(aoi_path)
+    aoi_gadm = aoi
+    gadm_buffer = 15000  # Big buffer to avoid missing departments
+    aoi_gadm.geometry = aoi_gadm.geometry.buffer(gadm_buffer)
+
+    with warnings.catch_warnings():  # For cases of polygons with more than 100 parts
+        warnings.simplefilter("ignore")
+        gadm = vectors.read(DataPath.GADM_PATH, window=aoi_gadm)
+    gadm = gadm.to_crs(ref_crs)
+    gadm_layer = gpd.clip(gadm, aoi)
+
+    breaks = [0, 6.7, 11.2, 22.4, 33.6]
+
+    # Prepare the geodataframe structure
+    gadm_df = gadm_layer[["NAME_0", "NAME_1", "NAME_2", "geometry"]]
+
+    # Prepare the three (0, 1, 2) levels of deparments:
+    # Level0
+    gadm_0 = gadm_df.dissolve(by="NAME_0").reset_index()
+    gadm_0["LEVL_CODE"] = 0
+    gadm_0 = gadm_0[["NAME_0", "LEVL_CODE", "geometry"]].rename(
+        columns={"NAME_0": "NUTS_NAME"}
+    )
+    # Level1
+    gadm_1 = gadm_df.dissolve(by="NAME_1").reset_index()
+    gadm_1["LEVL_CODE"] = 1
+    gadm_1 = gadm_1[["NAME_1", "LEVL_CODE", "geometry"]].rename(
+        columns={"NAME_1": "NUTS_NAME"}
+    )
+    # Level2
+    gadm_2 = gadm_df.dissolve(by="NAME_2").reset_index()
+    gadm_2["LEVL_CODE"] = 2
+    gadm_2 = gadm_2[["NAME_2", "LEVL_CODE", "geometry"]].rename(
+        columns={"NAME_2": "NUTS_NAME"}
+    )
+
+    # GADM layer for our AOI
+    rusle_stats = pd.concat([gadm_0, gadm_1, gadm_2]).reset_index()
+    rusle_stats["FER_RE_ave"] = 0.0
+    rusle_stats = rusle_stats[["LEVL_CODE", "NUTS_NAME", "FER_RE_ave", "geometry"]]
+
+    # Compute zonal statistics
+    stats = zonal_stats(rusle_stats, susceptibility_path, stats=["mean"])
+    print(stats)
+
+    # Add reclassification of Code (1 to 5) and Class (Very low to Severe)
+    def reclassify_code(value):
+        try:
+            if value > breaks[0] and value <= breaks[1]:
+                return 1.0
+            elif value > breaks[1] and value <= breaks[2]:
+                return 2.0
+            elif value > breaks[2] and value <= breaks[3]:
+                return 3.0
+            elif value > breaks[3] and value <= breaks[4]:
+                return 4.0
+            elif value > breaks[4]:
+                return 5.0
+            else:
+                return None
+        except TypeError:
+            return None
+
+    def reclassify_class(value):
+        try:
+            if value == 1:
+                return "Very low"
+            elif value == 2:
+                return "Low"
+            elif value == 3:
+                return "Moderate"
+            elif value == 4:
+                return "High"
+            elif value == 5:
+                return "Severe"
+            else:
+                return "No data"
+        except TypeError:
+            return "No data"
+
+    rusle_code = [{"rusle_code": reclassify_code(stat["mean"])} for stat in stats]
+    rusle_class = [
+        {"rusle_class": reclassify_class(rusle["rusle_code"])} for rusle in rusle_code
+    ]
+    # Write average, code and class to GeoDataFrame
+    rusle_stats["FER_RE_ave"] = pd.DataFrame(stats)
+    rusle_stats["RE_code"] = pd.DataFrame(rusle_code)
+    rusle_stats["RE_class"] = pd.DataFrame(rusle_class)
+
+    return rusle_stats
+
+
 def rusle_core(input_dict: dict) -> None:
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
@@ -1260,7 +1375,7 @@ def rusle_core(input_dict: dict) -> None:
     Args:
         input_dict (dict) : Input dict containing all needed values
     """
-
+    logging.info("Check Rusle parameters")
     create_tmp_dir(input_dict)
     aoi_buffer(input_dict)
     check_parameters(input_dict)
@@ -1293,5 +1408,14 @@ def rusle_core(input_dict: dict) -> None:
     a_reclass_path = os.path.join(output_dir, "ErosionRisk.tif")
     a_reclas_xarr_clipped = a_reclas_xarr.rio.clip(aoi.geometry.values, aoi.crs)
     rasters.write(a_reclas_xarr_clipped, a_reclass_path)
+
+    # Stats
+    LOGGER.info("-- Computing RUSLE statistics (FER_RE_av)")
+    a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
+    rusle_stats = compute_statistics(input_dict, a_path)
+
+    LOGGER.info("-- Writing RUSLE statistics in memory")
+    # Write statistics in memory
+    vectors.write(rusle_stats, os.path.join(output_dir, "FER_RE_ave.shp"))
 
     return
