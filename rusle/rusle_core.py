@@ -1364,9 +1364,9 @@ def compute_statistics(input_dict, susceptibility_path):
         {"rusle_class": reclassify_class(rusle["rusle_code"])} for rusle in rusle_code
     ]
     # Write average, code and class to GeoDataFrame
-    rusle_stats["FER_RE_ave"] = pd.DataFrame(stats)
-    rusle_stats["RE_code"] = pd.DataFrame(rusle_code)
-    rusle_stats["RE_class"] = pd.DataFrame(rusle_class)
+    rusle_stats["FER_ER_ave"] = pd.DataFrame(stats)
+    rusle_stats["ER_code"] = pd.DataFrame(rusle_code)
+    rusle_stats["ER_class"] = pd.DataFrame(rusle_class)
 
     return rusle_stats
 
@@ -1419,6 +1419,6 @@ def rusle_core(input_dict: dict) -> None:
 
     LOGGER.info("-- Writing RUSLE statistics in memory")
     # Write statistics in memory
-    vectors.write(rusle_stats, os.path.join(output_dir, "FER_RE_ave.shp"))
+    vectors.write(rusle_stats, os.path.join(output_dir, "FER_ER_ave.shp"))
 
     return
