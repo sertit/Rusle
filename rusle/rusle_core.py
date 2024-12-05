@@ -1271,8 +1271,12 @@ def compute_statistics(input_dict, susceptibility_path):
         Geodataframe with the statistics data for each of the Levels 0,1 and 2 availables
         in the AOI.
     """
+    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
     ref_epsg = input_dict.get(InputParameters.REF_EPSG.value)
     ref_crs = CRS.from_epsg(ref_epsg)
+
+    # Load the original AOI not cropped
+    original_aoi = vectors.read(os.path.join(tmp_dir, "aoi.shp"))
 
     # Read GADM layer and overlay with AOI
     aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
@@ -1285,7 +1289,7 @@ def compute_statistics(input_dict, susceptibility_path):
         warnings.simplefilter("ignore")
         gadm = vectors.read(DataPath.GADM_PATH, window=aoi_gadm)
     gadm = gadm.to_crs(ref_crs)
-    gadm_layer = gpd.clip(gadm, aoi)
+    gadm_layer = gpd.clip(gadm, original_aoi)
 
     breaks = [0, 6.7, 11.2, 22.4, 33.6]
 
@@ -1319,7 +1323,6 @@ def compute_statistics(input_dict, susceptibility_path):
 
     # Compute zonal statistics
     stats = zonal_stats(rusle_stats, susceptibility_path, stats=["mean"])
-    print(stats)
 
     # Add reclassification of Code (1 to 5) and Class (Very low to Severe)
     def reclassify_code(value):
