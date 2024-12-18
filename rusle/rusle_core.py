@@ -918,7 +918,6 @@ def make_raster_list_to_pre_process(input_dict: dict) -> dict:
         }
 
     if location == LocationType.GLOBAL.value:
-
         # -- Produce k
         k_xarr = produce_k_outside_europe(aoi_path)
         # -- Write k raster
@@ -978,8 +977,8 @@ def raster_pre_processing(
 
     # -- Loop on path into the dict
     ref_xarr = None
-    for i, key in enumerate(raster_path_dict):
-        LOGGER.info("********* {} ********".format(key))
+    for _, key in enumerate(raster_path_dict):
+        LOGGER.info(f"********* {key} ********")
         # -- Store raster path
         # key = "lulc"
         raster_path = raster_path_dict[key][0]
@@ -1011,7 +1010,7 @@ def raster_pre_processing(
             raster_crop_xarr = rasters.crop(raster_reproj_xarr, aoi_gdf, from_disk=True)
 
             # -- Write masked raster
-            raster_path_out = os.path.join(tmp_dir, "{}.tif".format(key))
+            raster_path_out = os.path.join(tmp_dir, f"{key}.tif")
             rasters.write(raster_crop_xarr, raster_path_out)
 
             # -- Store path result in a dict
@@ -1031,7 +1030,7 @@ def raster_pre_processing(
             raster_masked_xarr = rasters.mask(raster_collocate_xarr, aoi_gdf)
 
             # -- Write masked raster
-            raster_path_out = os.path.join(tmp_dir, "{}.tif".format(key))
+            raster_path_out = os.path.join(tmp_dir, f"{key}.tif")
             rasters.write(raster_masked_xarr, raster_path_out)
 
             # -- Store path result in a dict
@@ -1344,18 +1343,13 @@ def compute_statistics(input_dict, susceptibility_path):
 
     def reclassify_class(value):
         try:
-            if value == 1:
-                return "Very low"
-            elif value == 2:
-                return "Low"
-            elif value == 3:
-                return "Moderate"
-            elif value == 4:
-                return "High"
-            elif value == 5:
-                return "Severe"
-            else:
-                return "No data"
+            return {
+                1: "Very low",
+                2: "Low",
+                3: "Moderate",
+                4: "High",
+                5: "severe"
+            }.get(value, "No data")
         except TypeError:
             return "No data"
 
