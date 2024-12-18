@@ -1,14 +1,14 @@
 stages:
-#   - lint
-#   - test
+  - lint
+  - test
   - deploy
 
 variables:
   DOCKER_TLS_CERTDIR: ""
 
-# include:
-#   - project: 'sertit/groupware'
-#     file: '/ci_templates/arcgis_plugin.yaml'
+include:
+  - project: 'sertit/groupware'
+    file: '/ci_templates/arcgis_plugin.yaml'
 
 deploy:
   variables:

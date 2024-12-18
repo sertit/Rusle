@@ -1343,13 +1343,9 @@ def compute_statistics(input_dict, susceptibility_path):
 
     def reclassify_class(value):
         try:
-            return {
-                1: "Very low",
-                2: "Low",
-                3: "Moderate",
-                4: "High",
-                5: "severe"
-            }.get(value, "No data")
+            return {1: "Very low", 2: "Low", 3: "Moderate", 4: "High", 5: "severe"}.get(
+                value, "No data"
+            )
         except TypeError:
             return "No data"
 

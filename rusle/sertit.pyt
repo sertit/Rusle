@@ -11,7 +11,7 @@ You should have received a copy of the GNU General Public License along with RUS
 import arcpy
 
 
-class Toolbox(object):
+class Toolbox:
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the
         .pyt file)."""
@@ -22,7 +22,7 @@ class Toolbox(object):
         self.tools = [Rusle]
 
 
-class Rusle(object):
+class Rusle:
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
         self.label = "Rusle"
@@ -266,16 +266,15 @@ def epsg_from_arcgis_proj(arcgis_proj):
         sr.loadFromString(arcgis_proj)
         epsg_code = sr.factoryCode
 
-    except:
+    except Exception as exc:
         raise ValueError(
             "Input coordinate system is not from Arcgis coordinate system tools"
-        )
+        ) from exc
 
     return epsg_code
 
 
 def main_arcgis(parameters, messsages):
-
     import logging
 
     import arcpy
@@ -318,7 +317,7 @@ def main_arcgis(parameters, messsages):
     }
 
     # Little trick because rusle_core interprets empty string as real value
-    for key in input_dict.keys():
+    for key in input_dict:
         if input_dict[key] == "":
             input_dict[key] = None
 
@@ -330,7 +329,7 @@ def main_arcgis(parameters, messsages):
 
         logger.info("--- RUSLE was a success.")
 
-    except Exception as ex:
+    except Exception:
         import traceback
 
         logger.error("RUSLE has failed: %s", traceback.format_exc())

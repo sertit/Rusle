@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 # Output Check © 2024 by Sertit is licensed under Attribution-NonCommercial-NoDerivatives 4.0 International.
 # To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/
-""" Tests with output"""
+"""Tests with output"""
+
 import os
 import tempfile
 
