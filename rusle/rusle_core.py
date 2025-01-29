@@ -35,6 +35,7 @@ from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
+import whitebox_workflows as wbw
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -660,6 +661,66 @@ def produce_c(input_dict, post_process_dict):
 
     return ret
 
+def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
+    """
+    Produce the LS factor raster based on the Slope function
+    from sertit_utils and whitebox_workflows for the flowdir
+    computation
+    Args:
+        dem_path (str) : dem path
+        tmp_dir (str) : tmp dir path
+
+    Returns:
+        xarray of the ls factor raster
+    """ 
+
+    wbe = wbw.WbEnvironment()
+
+    # -- Compute D8 flow directions
+    dem = wbe.read_raster(dem_path)
+
+    # Fill pits in DEM
+    pit_filled_dem = wbe.fill_pits(dem)
+
+    # "Fill depressions" and "Resolve flats" in DEM
+    flooded_dem = wbe.fill_depressions(pit_filled_dem)
+
+    # Compute Flow Accumulation
+    acc = wbe.fd8_flow_accum(flooded_dem, out_type="cells")
+
+    acc_path = os.path.join(tmp_dir, "flow_acc.tif")
+    wbe.write_raster(acc, acc_path, compress=False)
+
+    acc_xarr = rasters.read(acc_path)
+
+    # -- Make slope percentage
+
+    # Compute Slope in degrees
+    slope_p_xarr =rasters.slope(dem_path, in_rad=False)
+
+    # -- m calculation
+    conditions = [
+        slope_p_xarr < 1,
+        (slope_p_xarr >= 1) & (slope_p_xarr < 3),
+        (slope_p_xarr >= 3) & (slope_p_xarr < 5),
+        (slope_p_xarr >= 5) & (slope_p_xarr < 12),
+        slope_p_xarr >= 12,
+    ]
+    choices = [0.2, 0.3, 0.4, 0.5, 0.6]
+    m = np.select(conditions, choices, default=np.nan)
+
+    # -- Extract cell size of the dem
+    with rasterio.open(dem_path, "r") as dem_dst:
+        # dem_epsg = str(dem_dst.crs)[-5:]
+        cellsizex, cellsizey = dem_dst.res
+
+    # -- Produce ls
+    # -- Equation 1 : https://www.researchgate.net/publication/338535112_A_Review_of_RUSLE_Model
+    ls_arr = (
+        0.065 + 0.0456 * slope_p_xarr + 0.006541 * np.power(slope_p_xarr, 2)
+    ) * np.power(acc_xarr.astype(np.float32) * cellsizex / 22.13, m)
+
+    return slope_p_xarr.copy(data=ls_arr)
 
 def produce_ls_factor_raw(dem_path: str, tmp_dir: str):
     """
@@ -1210,10 +1271,10 @@ def produce_ls(input_dict, post_process_dict):
 
     # --- Write reproj DEM
     dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
-    rasters.write(dem_crop_xarr, dem_reproj_path)  # , nodata=0)
+    rasters.write(dem_crop_xarr, dem_reproj_path, compress="deflate", predictor=1, dtype=np.float32)  # , nodata=0)
 
     # --- Produce ls ---
-    ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
+    ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
 
     # -- Collocate ls with the other results
     ls_xarr = rasters.collocate(
