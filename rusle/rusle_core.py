@@ -24,6 +24,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+import whitebox_workflows as wbw
 import xarray
 from eoreader.bands import NIR, RED
 from eoreader.reader import Reader
@@ -35,7 +36,6 @@ from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
-import whitebox_workflows as wbw
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -661,6 +661,7 @@ def produce_c(input_dict, post_process_dict):
 
     return ret
 
+
 def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
     """
     Produce the LS factor raster based on the Slope function
@@ -672,7 +673,7 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
 
     Returns:
         xarray of the ls factor raster
-    """ 
+    """
 
     wbe = wbw.WbEnvironment()
 
@@ -696,7 +697,7 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
     # -- Make slope percentage
 
     # Compute Slope in degrees
-    slope_p_xarr =rasters.slope(dem_path, in_rad=False)
+    slope_p_xarr = rasters.slope(dem_path, in_rad=False)
 
     # -- m calculation
     conditions = [
@@ -721,6 +722,7 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
     ) * np.power(acc_xarr.astype(np.float32) * cellsizex / 22.13, m)
 
     return slope_p_xarr.copy(data=ls_arr)
+
 
 def produce_ls_factor_raw(dem_path: str, tmp_dir: str):
     """
@@ -1271,7 +1273,13 @@ def produce_ls(input_dict, post_process_dict):
 
     # --- Write reproj DEM
     dem_reproj_path = os.path.join(tmp_dir, "dem.tif")
-    rasters.write(dem_crop_xarr, dem_reproj_path, compress="deflate", predictor=1, dtype=np.float32)  # , nodata=0)
+    rasters.write(
+        dem_crop_xarr,
+        dem_reproj_path,
+        compress="deflate",
+        predictor=1,
+        dtype=np.float32,
+    )  # , nodata=0)
 
     # --- Produce ls ---
     ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
