@@ -408,10 +408,14 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
 
     # -- Extract europe countries
     world_countries = vectors.read(DataPath.WORLD_COUNTRIES_PATH, bbox=aoi.envelope)
-    europe_countries = world_countries[world_countries["CONTINENT"] == "Europe"]
+    arable_c_countries = list(arable_c_dict.keys())
+    europe_countries = world_countries[
+        (world_countries["CONTINENT"] == "Europe")
+        & (world_countries["COUNTRY"].isin(arable_c_countries))
+    ]
 
     # -- Initialize arable arr
-    arable_c_xarr = xr.full_like(raster_xarr, fill_value=0.27)
+    arable_c_xarr = xarray.full_like(raster_xarr, fill_value=0.27)
 
     # -- Re project europe_countries
     crs_arable = arable_c_xarr.rio.crs
@@ -430,8 +434,9 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
 
     # -- Mask result with aoi
     arable_c_xarr = rasters.mask(arable_c_xarr, aoi)
+    arable_c_xarr_full = arable_c_xarr.fillna(1)
 
-    return arable_c_xarr
+    return arable_c_xarr, arable_c_xarr_full
 
 
 def produce_c(input_dict, post_process_dict):
@@ -522,7 +527,7 @@ def produce_c(input_dict, post_process_dict):
             334: [0.1, 0.55],
         }
         # -- Produce arable c
-        arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
+        arable_c_xarr, arable_c_xarr_full = produce_c_arable_europe(aoi_path, lulc_xarr)
         arable_c_xarr = rasters.where(
             np.isin(
                 lulc_xarr,
@@ -1312,7 +1317,7 @@ def produce_p(input_dict, post_process_dict, c_xarr):
     ):
         # -- Produce p
         p_value = 1  # Can change
-        p_xarr = xr.full_like(c_xarr, fill_value=p_value)
+        p_xarr = xarray.full_like(c_xarr, fill_value=p_value)
 
         # -- Write p
         p_path = os.path.join(tmp_dir, "p.tif")
@@ -1386,8 +1391,8 @@ def compute_statistics(input_dict, susceptibility_path):
 
     # GADM layer for our AOI
     rusle_stats = pd.concat([gadm_0, gadm_1, gadm_2]).reset_index()
-    rusle_stats["FER_RE_ave"] = 0.0
-    rusle_stats = rusle_stats[["LEVL_CODE", "NUTS_NAME", "FER_RE_ave", "geometry"]]
+    rusle_stats["FER_ER_ave"] = 0.0
+    rusle_stats = rusle_stats[["LEVL_CODE", "NUTS_NAME", "FER_ER_ave", "geometry"]]
 
     # Compute zonal statistics
     stats = zonal_stats(rusle_stats, susceptibility_path, stats=["mean"])
@@ -1412,7 +1417,7 @@ def compute_statistics(input_dict, susceptibility_path):
 
     def reclassify_class(value):
         try:
-            return {1: "Very low", 2: "Low", 3: "Moderate", 4: "High", 5: "severe"}.get(
+            return {1: "Very low", 2: "Low", 3: "Moderate", 4: "High", 5: "Severe"}.get(
                 value, "No data"
             )
         except TypeError:
@@ -1472,7 +1477,7 @@ def rusle_core(input_dict: dict) -> None:
     rasters.write(a_reclas_xarr_clipped, a_reclass_path)
 
     # Stats
-    LOGGER.info("-- Computing RUSLE statistics (FER_RE_av)")
+    LOGGER.info("-- Computing RUSLE statistics (FER_ER_av)")
     a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
     rusle_stats = compute_statistics(input_dict, a_path)
 

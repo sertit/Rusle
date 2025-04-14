@@ -1,10 +1,22 @@
 # RUSLE
-Computing the Mean (annual) soil loss (in ton/ha/year) with the [RUSLE 2015 model](https://web.jrc.ec.europa.eu/policy-model-inventory/explore/models/model-rusle2015/).
 
 :warning: **CONDA ENVIRONMENT**  
 **Be sure to have your ArcgisPro conda environment installed.
 See [here](https://git.unistra.fr/sertit/arcgis-pro/sertit-eo-conda-environment) for more information.**
 
+## Description
+Computing the Mean (annual) soil loss (in ton/ha/year) with the [RUSLE 2015 model](https://web.jrc.ec.europa.eu/policy-model-inventory/explore/models/model-rusle2015/).
+
+> :information_source: The **Europe method** has some particularities for the computation of the **C** index which uses the c_arable_index over Europe, for which the datasets are defined based in the policy report [Soil-related indicators to support agri-environmental policies (EUR30090)](https://www.google.com/url?sa=t&source=web&rct=j&opi=89978449&url=https://publications.jrc.ec.europa.eu/repository/bitstream/JRC119220/jrc119220_agsol_deliverable2019_online_clean.pdf&ved=2ahUKEwivxoyHzciMAxXC8bsIHc1bIjYQFnoECBYQAQ&usg=AOvVaw11mZ2lQKQyysij3qH39dsF). Here there are stated only 27 countries from the EU, so **C** values with this parameter might lack the LULC information and will only rely on either the Fraction of green Vegetation Coverportal (Fcover) or Satellite Data depending on the availability.
+The countries included in the computation of arable_c_index are:
+* Austria, Belgium, Bulgaria, Cyprus, Czechia, Germany, Denmark, Estonia, Greece, Spain, Finland, France, Hungary, Ireland, Italy, Lithuania, Luxembourg, Latvia, Malta, Netherlands, Poland, Portugal, Romania, Sweden, Slovenia, Slovakia, United Kingdom, Czech Republic and the former Yugoslav Republic of Macedonia.
+See below for an overview
+![Scope of the European method for the arable_c_index](EU_coverage.PNG)
+
+> :information_source: **Global or European method?** The main cases where you might find a lack of data while applying the European method would be when one of the following countries are inside of your Area of Interest:
+> * Andorra, Norway, Switzerland, Croatia, Serbia, Albania, Kosovo, Montenegro or even Bosnia and Herzegovina.
+
+> Therefore, if the use of the LULC remains relevant for your calculations for the C index, the best option would be to choose the GLOBAL method.
 
 ## Arcgis pro inputs
 
