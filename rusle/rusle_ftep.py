@@ -21,7 +21,7 @@ from sertit import s3
 
 DEBUG = False
 LOGGING_FORMAT = "%(asctime)s - [%(levelname)s] - %(message)s"
-LOGGER = logging.getLogger("OSM Charter")
+LOGGER = logging.getLogger("RUSLE")
 
 FTEP_S3_ENDPOINT = "s3.waw2-1.cloudferro.com"
 
@@ -78,7 +78,7 @@ def compute_rusle():
 
     try:
         # Compute RUSLE charter
-        rusle_core(input_dict)
+        rusle_core(input_dict, ftep=True)
         LOGGER.info("--- RUSLE was a success.")
         sys.exit(0)
 

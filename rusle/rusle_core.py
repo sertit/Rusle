@@ -1109,7 +1109,7 @@ def raster_pre_processing(
     return out_dict
 
 
-def produce_a_arr(input_dict):
+def produce_a_arr(input_dict, ftep):
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
     Args:
@@ -1145,7 +1145,7 @@ def produce_a_arr(input_dict):
 
     # -- Check if ls need to be calculated or not
     if ls_path is None:
-        ls_xarr = produce_ls(input_dict, post_process_dict)
+        ls_xarr = produce_ls(input_dict, post_process_dict, ftep)
     else:
         ls_xarr = rasters.read(post_process_dict["ls"], window=aoi_gdf)
 
@@ -1245,7 +1245,7 @@ def create_tmp_dir(input_dict):
     input_dict[InputParameters.TMP_DIR.value] = tmp_dir
 
 
-def produce_ls(input_dict, post_process_dict):
+def produce_ls(input_dict, post_process_dict, ftep):
     dem_name = input_dict.get(InputParameters.DEM_NAME.value)
     other_dem_path = input_dict.get(InputParameters.OTHER_DEM_PATH.value)
     aoi_path = input_dict.get(InputParameters.AOI_PATH.value)
@@ -1287,7 +1287,12 @@ def produce_ls(input_dict, post_process_dict):
     )  # , nodata=0)
 
     # --- Produce ls ---
-    ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
+    if ftep:
+        LOGGER.info((f"*** Compute ls_factor based on: pysheds ***"))
+        ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
+    else:
+        LOGGER.info((f"*** Compute ls_factor based on: whitebox_workflows ***"))
+        ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
 
     # -- Collocate ls with the other results
     ls_xarr = rasters.collocate(
@@ -1435,7 +1440,7 @@ def compute_statistics(input_dict, susceptibility_path):
     return rusle_stats
 
 
-def rusle_core(input_dict: dict) -> None:
+def rusle_core(input_dict: dict, ftep) -> None:
     """
     Produce average annual soil loss (ton/ha/year) with the RUSLE model.
 
@@ -1452,7 +1457,7 @@ def rusle_core(input_dict: dict) -> None:
     tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
 
     # Produce a with RUSLE model
-    a_xarr = produce_a_arr(input_dict)
+    a_xarr = produce_a_arr(input_dict, ftep)
     gc.collect()
 
     # Reload AOI to clip the output raster to the AOI

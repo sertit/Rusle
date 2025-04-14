@@ -198,7 +198,7 @@ def compute_rusle(
         print(DataPath.GLOBAL_DIR, DataPath.WORLD_COUNTRIES_PATH)
 
         try:
-            rusle_core(input_dict)
+            rusle_core(input_dict, ftep)
             LOGGER.info("RUSLE was a success.")
             sys.exit(0)
 
