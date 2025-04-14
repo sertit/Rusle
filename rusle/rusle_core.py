@@ -1288,10 +1288,10 @@ def produce_ls(input_dict, post_process_dict, ftep):
 
     # --- Produce ls ---
     if ftep:
-        LOGGER.info((f"*** Compute ls_factor based on: pysheds ***"))
+        LOGGER.info("*** Compute ls_factor based on: pysheds ***")
         ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
     else:
-        LOGGER.info((f"*** Compute ls_factor based on: whitebox_workflows ***"))
+        LOGGER.info("*** Compute ls_factor based on: whitebox_workflows ***")
         ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
 
     # -- Collocate ls with the other results
