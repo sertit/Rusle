@@ -41,7 +41,7 @@ def test_rusle():
             "output_dir": output,
         }
         DataPath.load_paths()
-        rusle_core(input_dict=input_dict)
+        rusle_core(input_dict=input_dict, ftep=False)
 
         output_classification = os.path.join(output, "ErosionRisk.tif")
         ci.assert_raster_max_mismatch(
