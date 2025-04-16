@@ -15,3 +15,6 @@
 ## 2.4.6 (2025-04-16)
 - Delete: Add a try + time.sleep() on wbw.fill_depressions to avoid panicking errors when ran in FTEP
 - Return of pysheds method for computing the ls_factor as a backup for FTEP processing.
+
+## 2.4.7 (2025-04-16)
+- Keep pysheds as the only method for computing the ls_factor in the FTEP.
