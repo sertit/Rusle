@@ -693,8 +693,8 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str, ftep: bool):
     if ftep:
         # For the FTEP, try re-running fill_depressions to avoid panicking issue
         # identified here: gitlab.unistra.fr/sertit/arcgis-pro/lsi/-/issues/2
-        def try_fill_depressions_ftep(max_attempts=2):
-            attempt = 1
+        def try_fill_depressions_ftep(max_attempts=3):
+            attempt = 0
             while attempt < max_attempts:
                 try:
                     flooded_dem = wbe.fill_depressions(pit_filled_dem)
