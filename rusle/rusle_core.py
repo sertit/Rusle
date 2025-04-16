@@ -16,7 +16,8 @@ import gc
 import logging
 import os
 import sqlite3
-import time
+
+# import time
 import warnings
 from enum import unique
 
@@ -668,7 +669,7 @@ def produce_c(input_dict, post_process_dict):
     return ret
 
 
-def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str, ftep: bool):
+def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
     """
     Produce the LS factor raster based on the Slope function
     from sertit_utils and whitebox_workflows for the flowdir
@@ -689,27 +690,28 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str, ftep: bool):
     # Fill pits in DEM
     pit_filled_dem = wbe.fill_pits(dem)
 
-    # "Fill depressions" and "Resolve flats" in DEM
-    if ftep:
-        # For the FTEP, try re-running fill_depressions to avoid panicking issue
-        # identified here: gitlab.unistra.fr/sertit/arcgis-pro/lsi/-/issues/2
-        def try_fill_depressions_ftep(max_attempts=3):
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    flooded_dem = wbe.fill_depressions(pit_filled_dem)
-                    return flooded_dem
-                except Exception as e:
-                    LOGGER.info(f"Attempt #{attempt} has failed: {e}")
-                    time.sleep(5)
-                    attempt += 1
-            raise RuntimeError(
-                "fill_depressions failed after 2 attemps, please re-run EO4SDG_FER-ER with the same inputs and this error should be solved"
-            )
+    # # "Fill depressions" and "Resolve flats" in DEM
+    # if ftep:
+    #     # For the FTEP, try re-running fill_depressions to avoid panicking issue
+    #     # identified here: gitlab.unistra.fr/sertit/arcgis-pro/lsi/-/issues/2
+    #     def try_fill_depressions_ftep(max_attempts=3):
+    #         attempt = 0
+    #         while attempt < max_attempts:
+    #             try:
+    #                 flooded_dem = wbe.fill_depressions(pit_filled_dem)
+    #                 return flooded_dem
+    #             except Exception as e:
+    #                 LOGGER.info(f"Attempt #{attempt} has failed: {e}")
+    #                 time.sleep(5)
+    #                 attempt += 1
+    #         raise RuntimeError(
+    #             "fill_depressions failed after 2 attemps, please re-run EO4SDG_FER-ER with the same inputs and this error should be solved"
+    #         )
 
-        flooded_dem = try_fill_depressions_ftep()
-    else:
-        flooded_dem = wbe.fill_depressions(pit_filled_dem)
+    #     flooded_dem = try_fill_depressions_ftep()
+    # else:
+
+    flooded_dem = wbe.fill_depressions(pit_filled_dem)
 
     # Compute Flow Accumulation
     acc = wbe.fd8_flow_accum(flooded_dem, out_type="cells")
@@ -1312,8 +1314,20 @@ def produce_ls(input_dict, post_process_dict, ftep):
     #     ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
     # else:
     LOGGER.info("-- Compute ls_factor based on: whitebox_workflows --")
-    ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir, ftep)
-
+    try:
+        ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
+    except Exception as e:
+        if ftep:
+            LOGGER.info(
+                f"There's an error with whitebox_workflows so the process will be run with pysheds: {e}"
+            )
+            try:
+                ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
+            except Exception as exc:
+                LOGGER.info(f"There's an error with pysheds: {exc}")
+                raise RuntimeError(
+                    "The ls_factor computation failed, please re-run EO4SDG_FER-ER with the same inputs and this error should be solved"
+                ) from exc
     # -- Collocate ls with the other results
     ls_xarr = rasters.collocate(
         rasters.read(
