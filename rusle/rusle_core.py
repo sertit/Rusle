@@ -35,7 +35,7 @@ from pysheds.grid import Grid
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterstats import zonal_stats
-from sertit import AnyPath, files, misc, rasters, strings, vectors
+from sertit import AnyPath, files, misc, rasters, rasters_rio, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
 
@@ -436,9 +436,8 @@ def produce_c_arable_europe(aoi_path: str, raster_xarr):
 
     # -- Mask result with aoi
     arable_c_xarr = rasters.mask(arable_c_xarr, aoi)
-    arable_c_xarr_full = arable_c_xarr.fillna(1)
 
-    return arable_c_xarr, arable_c_xarr_full
+    return arable_c_xarr
 
 
 def produce_c(input_dict, post_process_dict):
@@ -506,6 +505,8 @@ def produce_c(input_dict, post_process_dict):
         # -- Open the lulc raster
         lulc_xarr = rasters.read(post_process_dict["lulc"], window=aoi_gdf)
 
+    rasters.write(lulc_xarr, os.path.join(tmp_dir, "lulc_xarr.tif"))
+
     if (lulc_name == LandcoverStructure.CLC.value) or (
         lulc_name == LandcoverType.P03.value
     ):
@@ -529,7 +530,8 @@ def produce_c(input_dict, post_process_dict):
             334: [0.1, 0.55],
         }
         # -- Produce arable c
-        arable_c_xarr, arable_c_xarr_full = produce_c_arable_europe(aoi_path, lulc_xarr)
+        arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
+        rasters.write(arable_c_xarr, os.path.join(tmp_dir, "arable_c_xarr.tif"))
         arable_c_xarr = rasters.where(
             np.isin(
                 lulc_xarr,
@@ -542,6 +544,7 @@ def produce_c(input_dict, post_process_dict):
             arable_c_xarr,
             np.nan,
         )
+        rasters.write(arable_c_xarr, os.path.join(tmp_dir, "arable_c_xarr_2.tif"))
 
     # -- Global Land Cover - Copernicus 2019 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
@@ -664,6 +667,9 @@ def produce_c(input_dict, post_process_dict):
     ret = arable_c_xarr.copy(data=c_arr)
     # -- Write c raster
     c_out = os.path.join(tmp_dir, "c.tif")
+
+    fcover_footprint = rasters_rio.get_footprint(fcover_xarr)
+    ret = rasters.mask(ret, fcover_footprint)
     rasters.write(ret, c_out)  # , nodata=0)
 
     return ret
@@ -1309,25 +1315,13 @@ def produce_ls(input_dict, post_process_dict, ftep):
     )  # , nodata=0)
 
     # --- Produce ls ---
-    # if ftep:
-    #     LOGGER.info("*** Compute ls_factor based on: pysheds ***")
-    #     ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
-    # else:
-    LOGGER.info("-- Compute ls_factor based on: whitebox_workflows --")
-    try:
+    if ftep:
+        LOGGER.info("*** Compute ls_factor based on: pysheds ***")
+        ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
+    else:
+        LOGGER.info("-- Compute ls_factor based on: whitebox_workflows --")
         ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
-    except Exception as e:
-        if ftep:
-            LOGGER.info(
-                f"There's an error with whitebox_workflows so the process will be run with pysheds: {e}"
-            )
-            try:
-                ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
-            except Exception as exc:
-                LOGGER.info(f"There's an error with pysheds: {exc}")
-                raise RuntimeError(
-                    "The ls_factor computation failed, please re-run EO4SDG_FER-ER with the same inputs and this error should be solved"
-                ) from exc
+
     # -- Collocate ls with the other results
     ls_xarr = rasters.collocate(
         rasters.read(
