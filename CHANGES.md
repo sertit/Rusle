@@ -18,3 +18,7 @@
 
 ## 2.4.7 (2025-04-16)
 - Keep pysheds as the only method for computing the ls_factor in the FTEP.
+- Mask the c_factor to the image footprint to avoid random pixels.
+
+## 2.4.8 (2025-04-17)
+- Change the approach for computing the ls_factor in the FTEP. Compute fill_depressions with pysheds to avoid panicking error, then go back to the regular whitebox_workflows computations.
