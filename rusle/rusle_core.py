@@ -38,6 +38,7 @@ from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, rasters_rio, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
+from sertit.rasters import FLOAT_NODATA
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -505,8 +506,6 @@ def produce_c(input_dict, post_process_dict):
         # -- Open the lulc raster
         lulc_xarr = rasters.read(post_process_dict["lulc"], window=aoi_gdf)
 
-    rasters.write(lulc_xarr, os.path.join(tmp_dir, "lulc_xarr.tif"))
-
     if (lulc_name == LandcoverStructure.CLC.value) or (
         lulc_name == LandcoverType.P03.value
     ):
@@ -531,7 +530,6 @@ def produce_c(input_dict, post_process_dict):
         }
         # -- Produce arable c
         arable_c_xarr = produce_c_arable_europe(aoi_path, lulc_xarr)
-        rasters.write(arable_c_xarr, os.path.join(tmp_dir, "arable_c_xarr.tif"))
         arable_c_xarr = rasters.where(
             np.isin(
                 lulc_xarr,
@@ -544,7 +542,6 @@ def produce_c(input_dict, post_process_dict):
             arable_c_xarr,
             np.nan,
         )
-        rasters.write(arable_c_xarr, os.path.join(tmp_dir, "arable_c_xarr_2.tif"))
 
     # -- Global Land Cover - Copernicus 2019 (100m)
     elif lulc_name == LandcoverStructure.GLC.value:
@@ -675,7 +672,7 @@ def produce_c(input_dict, post_process_dict):
     return ret
 
 
-def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
+def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str, ftep: bool):
     """
     Produce the LS factor raster based on the Slope function
     from sertit_utils and whitebox_workflows for the flowdir
@@ -690,34 +687,40 @@ def produce_ls_factor_raw_wbw(dem_path: str, tmp_dir: str):
 
     wbe = wbw.WbEnvironment()
 
-    # -- Compute D8 flow directions
-    dem = wbe.read_raster(dem_path)
+    # When computing in the FTEP we use pysheds for fill_depressions to avoid panicking issue
+    # identified here: gitlab.unistra.fr/sertit/arcgis-pro/lsi/-/issues/2
+    if ftep:
+        # -- Compute D8 flow directions
+        grid = Grid.from_raster(dem_path)
+        dem = grid.read_raster(dem_path)
 
-    # Fill pits in DEM
-    pit_filled_dem = wbe.fill_pits(dem)
+        # Fill pits in DEM
+        pit_filled_dem = grid.fill_pits(dem)
 
-    # # "Fill depressions" and "Resolve flats" in DEM
-    # if ftep:
-    #     # For the FTEP, try re-running fill_depressions to avoid panicking issue
-    #     # identified here: gitlab.unistra.fr/sertit/arcgis-pro/lsi/-/issues/2
-    #     def try_fill_depressions_ftep(max_attempts=3):
-    #         attempt = 0
-    #         while attempt < max_attempts:
-    #             try:
-    #                 flooded_dem = wbe.fill_depressions(pit_filled_dem)
-    #                 return flooded_dem
-    #             except Exception as e:
-    #                 LOGGER.info(f"Attempt #{attempt} has failed: {e}")
-    #                 time.sleep(5)
-    #                 attempt += 1
-    #         raise RuntimeError(
-    #             "fill_depressions failed after 2 attemps, please re-run EO4SDG_FER-ER with the same inputs and this error should be solved"
-    #         )
+        # Fill depressions in DEM
+        flooded_dem = grid.fill_depressions(pit_filled_dem)
+        ps_flooded_dem_path = os.path.join(tmp_dir, "flooded_dem.tif")
 
-    #     flooded_dem = try_fill_depressions_ftep()
-    # else:
+        grid.to_raster(
+            flooded_dem,
+            ps_flooded_dem_path,
+            # target_view=ps_flooded_dem_path.viewfinder,
+            blockxsize=16,
+            blockysize=16,
+            dtype=np.float32,
+        )
 
-    flooded_dem = wbe.fill_depressions(pit_filled_dem)
+        # acc_xarr = rasters.read(ps_flooded_dem_path)
+        flooded_dem = wbe.read_raster(ps_flooded_dem_path)
+
+    else:
+        # -- Compute D8 flow directions
+        dem = wbe.read_raster(dem_path)
+
+        # Fill pits in DEM
+        pit_filled_dem = wbe.fill_pits(dem)
+
+        flooded_dem = wbe.fill_depressions(pit_filled_dem)
 
     # Compute Flow Accumulation
     acc = wbe.fd8_flow_accum(flooded_dem, out_type="cells")
@@ -1315,12 +1318,7 @@ def produce_ls(input_dict, post_process_dict, ftep):
     )  # , nodata=0)
 
     # --- Produce ls ---
-    if ftep:
-        LOGGER.info("*** Compute ls_factor based on: pysheds ***")
-        ls_raw_xarr = produce_ls_factor_raw(dem_reproj_path, tmp_dir)
-    else:
-        LOGGER.info("-- Compute ls_factor based on: whitebox_workflows --")
-        ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir)
+    ls_raw_xarr = produce_ls_factor_raw_wbw(dem_reproj_path, tmp_dir, ftep)
 
     # -- Collocate ls with the other results
     ls_xarr = rasters.collocate(
