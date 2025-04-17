@@ -16,8 +16,6 @@ import gc
 import logging
 import os
 import sqlite3
-
-# import time
 import warnings
 from enum import unique
 
@@ -38,7 +36,6 @@ from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, rasters_rio, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
-from sertit.rasters import FLOAT_NODATA
 
 np.seterr(divide="ignore", invalid="ignore")
 
