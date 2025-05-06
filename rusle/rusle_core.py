@@ -16,6 +16,8 @@ import gc
 import logging
 import os
 import sqlite3
+import sys
+import traceback
 import warnings
 from enum import unique
 
@@ -29,9 +31,11 @@ import xarray
 from eoreader.bands import NIR, RED
 from eoreader.reader import Reader
 from odc.geo import xr  # noqa
+from pyogrio.errors import DataSourceError
 from pysheds.grid import Grid
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
+from rasterio.errors import RasterioIOError
 from rasterstats import zonal_stats
 from sertit import AnyPath, files, misc, rasters, rasters_rio, strings, vectors
 from sertit.misc import ListEnum
@@ -1471,43 +1475,61 @@ def rusle_core(input_dict: dict, ftep) -> None:
         input_dict (dict) : Input dict containing all needed values
     """
     logging.info("Check Rusle parameters")
-    create_tmp_dir(input_dict)
-    aoi_buffer(input_dict)
-    check_parameters(input_dict)
 
-    # --- Extract parameters ---
-    output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
-    tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
+    # Catch FTEP-S3 errors (S3 access instability most likely related to networking issues, timeouts, or rate limits)
+    try: 
+        create_tmp_dir(input_dict)
+        aoi_buffer(input_dict)
+        check_parameters(input_dict)
 
-    # Produce a with RUSLE model
-    a_xarr = produce_a_arr(input_dict, ftep)
-    gc.collect()
+        # --- Extract parameters ---
+        output_dir = input_dict.get(InputParameters.OUTPUT_DIR.value)
+        tmp_dir = input_dict.get(InputParameters.TMP_DIR.value)
 
-    # Reload AOI to clip the output raster to the AOI
-    aoi_path = os.path.join(tmp_dir, "aoi.shp")
-    aoi = vectors.read(aoi_path)
+        # Produce a with RUSLE model
+        a_xarr = produce_a_arr(input_dict, ftep)
+        gc.collect()
 
-    # -- Write the a raster
-    a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
-    a_xarr_clipped = a_xarr.rio.clip(aoi.geometry.values, aoi.crs)
-    rasters.write(a_xarr_clipped, a_path)
-    del a_xarr_clipped
-    gc.collect()
+        # Reload AOI to clip the output raster to the AOI
+        aoi_path = os.path.join(tmp_dir, "aoi.shp")
+        aoi = vectors.read(aoi_path)
 
-    # -- Reclass a
-    a_reclas_xarr = produce_a_reclass_arr(a_xarr)
-    del a_xarr
-    gc.collect()
+        # -- Write the a raster
+        a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
+        a_xarr_clipped = a_xarr.rio.clip(aoi.geometry.values, aoi.crs)
+        rasters.write(a_xarr_clipped, a_path)
+        del a_xarr_clipped
+        gc.collect()
 
-    # -- Write the a raster
-    a_reclass_path = os.path.join(output_dir, "ErosionRisk.tif")
-    a_reclas_xarr_clipped = a_reclas_xarr.rio.clip(aoi.geometry.values, aoi.crs)
-    rasters.write(a_reclas_xarr_clipped, a_reclass_path)
+        # -- Reclass a
+        a_reclas_xarr = produce_a_reclass_arr(a_xarr)
+        del a_xarr
+        gc.collect()
 
-    # Stats
-    LOGGER.info("-- Computing RUSLE statistics (FER_ER_av)")
-    a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
-    rusle_stats = compute_statistics(input_dict, a_path)
+        # -- Write the a raster
+        a_reclass_path = os.path.join(output_dir, "ErosionRisk.tif")
+        a_reclas_xarr_clipped = a_reclas_xarr.rio.clip(aoi.geometry.values, aoi.crs)
+        rasters.write(a_reclas_xarr_clipped, a_reclass_path)
+
+        # Stats
+        LOGGER.info("-- Computing RUSLE statistics (FER_ER_av)")
+        a_path = os.path.join(output_dir, "MeanSoilLoss.tif")
+        rusle_stats = compute_statistics(input_dict, a_path)
+
+    except RasterioIOError as e:
+        print("Could not open or read the raster. Check if your data is available at your path or try relaunching RUSLE now or later")
+        print(str(e))
+        sys.exit(1)
+
+    except DataSourceError as e:
+        print("Could not open or read the vector file. Check if your data is available at your path or try relaunching RUSLE now or later")
+        print(str(e))
+        sys.exit(1)
+
+    except Exception as e:
+        print("Unexpected error:", type(e).__name__)
+        traceback.print_exc()  # Full traceback
+        sys.exit(1)
 
     LOGGER.info("-- Writing RUSLE statistics in memory")
     # Write statistics in memory
