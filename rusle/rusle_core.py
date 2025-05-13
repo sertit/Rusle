@@ -1518,10 +1518,12 @@ def rusle_core(input_dict: dict, ftep) -> None:
 
     except RasterioIOError as e:
         LOGGER.error("Could not open or read the raster. Check if your data is available at your path or try relaunching RUSLE now or later", exc_info=True)
+        print(str(e))
         sys.exit(1)
 
     except DataSourceError as e:
         LOGGER.error("Could not open or read the vector file. Check if your data is available at your path or try relaunching RUSLE now or later", exc_info=True)
+        print(str(e))
         sys.exit(1)
 
     except Exception as e:
