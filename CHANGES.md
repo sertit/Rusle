@@ -1,5 +1,8 @@
 # Release History
 
+## 2.4.10 (2025-05-13)
+- Change print errors to loggers
+
 ## 2.4.9 (2025-05-06)
 - Add exception control for error in reading rasters with rasterio and vectors with pyogrio at the FTEP, assumed to be related with problems of timeouts, failed reads, networking issues, rate limits, etc.
 - DOC: Modify in CHANGES.md organization.
