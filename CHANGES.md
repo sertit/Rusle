@@ -1,7 +1,8 @@
 # Release History
 
-## 2.4.12 (2025-MM-DD)
+## 2.4.12 (2025-07-31)
 - CI: Use new groupware CI template for triggering sertit_atools update
+- Change arcgispro toolbox from category RRM to CEMS RRM
 
 ## 2.4.10 (2025-05-13)
 - Change print errors to loggers
