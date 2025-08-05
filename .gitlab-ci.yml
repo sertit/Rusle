@@ -34,7 +34,7 @@ deploy:docker:
    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
      when: manual
      variables:
-       IMAGE_TAGS: "sertit/arcgispro-eo:rusle_stable,$CI_REGISTRY_IMAGE:stable"
+       IMAGE_TAGS: "sertit/arcgispro-eo:rusle_latest,$CI_REGISTRY_IMAGE:stable"
    - if: $CI_COMMIT_BRANCH
      variables:
        IMAGE_TAGS: "sertit/arcgispro-eo:rusle_stable,$CI_REGISTRY_IMAGE:stable"
