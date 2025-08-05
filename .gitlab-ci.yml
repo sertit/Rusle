@@ -11,6 +11,8 @@ include:
     file: '/ci_templates/arcgis_plugin.yaml'
   - project: 'sertit/groupware'
     file: '/ci_templates/deploy_gitlab_registry.yaml'
+  - project: 'sertit/groupware'
+    file: '/ci_templates/build_docker_bake.yaml'
 
 deploy:sertit_atools:
   extends: .trigger_sertit_atools_update_tool
