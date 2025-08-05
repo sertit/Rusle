@@ -1,6 +1,6 @@
 FROM sertit/eo-containers:geo_latest
 
-MAINTAINER Bastien Coriat
+LABEL org.opencontainers.image.authors="Bastien CORIAT"
 
 RUN apt-get update && apt-get install -y wget libgdal-dev build-essential
 RUN pip install gdal==3.6.2
