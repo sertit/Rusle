@@ -3,9 +3,6 @@ stages:
   - test
   - deploy
 
-variables:
-  DOCKER_TLS_CERTDIR: ""
-
 include:
   - project: 'sertit/groupware'
     file: '/ci_templates/arcgis_plugin.yaml'
@@ -25,17 +22,14 @@ deploy:registry:
 deploy:docker:
   extends: .deploy_container_bake
   stage: deploy
-  before_script:
-    - docker login -u sertit -p$DOCKER_HUB_TOKEN
-    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p$CI_REGISTRY_PASSWORD
   variables:
     TARGET: "rusle"
   rules:
    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
      when: manual
      variables:
-       IMAGE_TAGS: "sertit/arcgispro-eo:rusle_latest,$CI_REGISTRY_IMAGE:stable"
-   - if: $CI_COMMIT_BRANCH
+       IMAGE_TAGS: "sertit/arcgispro-eo:rusle_latest,$CI_REGISTRY_IMAGE:latest"
+   - if: $CI_COMMIT_TAG
      variables:
        IMAGE_TAGS: "sertit/arcgispro-eo:rusle_stable,$CI_REGISTRY_IMAGE:stable"
   needs:
