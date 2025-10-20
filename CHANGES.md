@@ -1,5 +1,10 @@
 # Release History
 
+## 2.4.13 (2025-mm-dd)
+
+- LINT: Add linting for `.pyt` files
+- CI: Add pre-commit bot
+- 
 ## 2.4.12 (2025-07-31)
 - CI: Use new groupware CI template for triggering sertit_atools update
 - Change arcgispro toolbox from category RRM to CEMS RRM

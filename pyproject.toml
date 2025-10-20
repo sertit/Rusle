@@ -38,6 +38,9 @@ dev = [
     "tempenv",
     ]
 
+[tool.ruff]
+extend-include = ["*.pyt"]
+
 [tool.ruff.lint]
 select = [
     # pycodestyle
