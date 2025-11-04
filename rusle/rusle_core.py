@@ -37,7 +37,7 @@ from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.errors import RasterioIOError
 from rasterstats import zonal_stats
-from sertit import AnyPath, files, misc, rasters, rasters_rio, strings, vectors
+from sertit import AnyPath, misc, path, rasters, rasters_rio, strings, vectors
 from sertit.misc import ListEnum
 from sertit.unistra import get_geodatastore
 
@@ -337,7 +337,7 @@ def produce_fcover(
     ndvi_crop_xarr = rasters.crop(ndvi_reproj_xarr, aoi_gdf)
 
     # -- Write the NDVI cropped
-    ndvi_crop_path = os.path.join(files.to_abspath(tmp_dir), "ndvi.tif")
+    ndvi_crop_path = os.path.join(path.to_abspath(tmp_dir), "ndvi.tif")
     rasters.write(ndvi_crop_xarr, ndvi_crop_path)  # , nodata=0)
 
     # -- Extract NDVI min and max inside the AOI
@@ -1477,7 +1477,7 @@ def rusle_core(input_dict: dict, ftep) -> None:
     logging.info("Check Rusle parameters")
 
     # Catch FTEP-S3 errors (S3 access instability most likely related to networking issues, timeouts, or rate limits)
-    try: 
+    try:
         create_tmp_dir(input_dict)
         aoi_buffer(input_dict)
         check_parameters(input_dict)
@@ -1517,12 +1517,18 @@ def rusle_core(input_dict: dict, ftep) -> None:
         rusle_stats = compute_statistics(input_dict, a_path)
 
     except RasterioIOError as e:
-        LOGGER.error("Could not open or read the raster. Check if your data is available at your path or try relaunching RUSLE now or later", exc_info=True)
+        LOGGER.error(
+            "Could not open or read the raster. Check if your data is available at your path or try relaunching RUSLE now or later",
+            exc_info=True,
+        )
         print(str(e))
         sys.exit(1)
 
     except DataSourceError as e:
-        LOGGER.error("Could not open or read the vector file. Check if your data is available at your path or try relaunching RUSLE now or later", exc_info=True)
+        LOGGER.error(
+            "Could not open or read the vector file. Check if your data is available at your path or try relaunching RUSLE now or later",
+            exc_info=True,
+        )
         print(str(e))
         sys.exit(1)
 
